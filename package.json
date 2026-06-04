@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google/genai": "^2.8.0",
     "@google/generative-ai": "^0.24.1",
     "lucide-react": "^1.16.0",
     "openai": "^6.39.0",
