@@ -46,43 +46,53 @@ function App() {
   const matchRatePercent = Math.round(matchRate * 100)
 
   // 👈 2. AI와 통신하기 위해 async/await 구문으로 변경
+  // 👈 기존의 지저분하게 중복된 코드를 모두 지우고 이 부분으로 덮어씌우세요!
   const handleGenerate = async (input) => {
     setIsLoading(true)
     setErrorMessage('')
 
     try {
-      // startDate와 endDate를 합쳐서 AI에게 알려줄 '일정' 텍스트로 변환
       const scheduleText = `${input.startDate} 부터 ${input.endDate} 까지`
-
-      // 우리가 만든 AI 함수 호출!
+      
       const aiData = await getSaharaRecommendation(
         input.destination,
         scheduleText,
         input.companion,
         input.concept
       )
+      
+      // 고도화된 JSON 데이터를 기존 UI 모델에 맞게 변환 (데이터 정제 및 안전성 강화)
+      const formattedResults = aiData.map((item, index) => {
+        // AI가 예산을 누락하거나 문자로 줬을 경우를 대비한 안전 장치 (에러 방지)
+        const safeBudget = Number(item.totalBudget) || 0; 
 
-      // 👈 3. AI가 준 JSON 데이터를 기존 화면 UI 객체 구조에 딱 맞게 맵핑(변환)
-      const formattedResults = aiData.map((item, index) => ({
-        id: `ai-course-${Date.now()}-${index}`, // 고유 ID 생성
-        influencerCourse: false,
-        estimatedTime: 'AI 맞춤 생성 코스',
-        theme: item.themeName,
-        description: item.themeDescription,
-        // AI의 itinerary 배열을 기존 UI의 days 배열 형태로 변환
-        days: item.itinerary.map((dayPlan) => ({
-          day: `Day ${dayPlan.day}`,
-          schedules: dayPlan.places.map((place) => ({
-            place: place.placeName // 화면에 보여줄 장소명
+        return {
+          id: `ai-course-${Date.now()}-${index}`,
+          influencerCourse: false,
+          estimatedTime: `예상 총 경비: ${safeBudget.toLocaleString()}원`,
+          theme: item.themeName || '맞춤 테마',
+          description: item.themeDescription || '',
+          days: (item.itinerary || []).map((dayPlan) => ({
+            day: `Day ${dayPlan.day}`,
+            schedules: (dayPlan.places || []).map((place) => {
+              // 개별 장소 경비도 숫자로 강제 변환
+              const safeCost = Number(place.estimatedCost) || 0;
+              return {
+                place: place.placeName || '장소명 없음',
+                category: place.category || '',
+                transit: place.transitInfo || '',
+                cost: safeCost
+              }
+            })
           }))
-        }))
-      }))
+        }
+      })
 
-      setRecommendations(formattedResults) // 맵핑된 진짜 데이터를 화면에 렌더링!
+      setRecommendations(formattedResults)
       setAddedCourseIds([])
     } catch (error) {
-      console.error("AI 생성 에러:", error)
-      setErrorMessage('AI 코스를 불러오지 못했습니다. 다시 시도해주세요.')
+      console.error("AI 생성 에러 상세 로그:", error)
+      setErrorMessage('코스 최적화 중 문제가 발생했습니다. 다시 시도해주세요.')
     } finally {
       setIsLoading(false)
     }
@@ -93,7 +103,7 @@ function App() {
       setIsLoginOpen(true)
       return
     }
-
+    
     setAddedCourseIds((prev) => {
       if (prev.includes(courseId)) {
         return prev
@@ -306,18 +316,47 @@ function App() {
                   <h3>{course.theme}</h3>
                   <p>{course.description}</p>
 
-                  <div className="day-preview">
+                <div className="day-preview">
                     {course.days.map((day) => (
-                      <div key={day.day}>
-                        <span>{day.day}</span>
-                        <p>{day.schedules[0]?.place}</p>
+                      <div key={day.day} style={{ marginBottom: '15px' }}>
+                        <span style={{ fontWeight: 'bold', color: '#007BFF', display: 'block', marginBottom: '8px' }}>
+                          {day.day}
+                        </span>
+                        
+                        {/* 첫 번째 장소만 보여주던 구조에서 -> 모든 장소의 최적화된 동선(노드)을 나열하도록 변경 */}
+                        {day.schedules.map((schedule, sIndex) => (
+                          <div key={sIndex} style={{ 
+                            margin: '10px 0', 
+                            paddingLeft: '10px', 
+                            borderLeft: '2px solid #eee' 
+                          }}>
+                            <p style={{ margin: '0 0 5px 0', fontWeight: '500' }}>
+                              {schedule.place} 
+                              {schedule.category && (
+                                <span style={{ fontSize: '0.8em', color: '#888', marginLeft: '5px' }}>
+                                  ({schedule.category})
+                                </span>
+                              )}
+                            </p>
+                            
+                            <div style={{ fontSize: '0.85em', color: '#666' }}>
+                              {schedule.cost > 0 && (
+                                <span style={{ marginRight: '10px' }}>💰 {schedule.cost.toLocaleString()}원</span>
+                              )}
+                              {schedule.transit && schedule.transit !== '일정 종료' && (
+                                <span>🚶‍♂️ ➡️ {schedule.transit}</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     ))}
                   </div>
+
                   {/* course의 모든 장소 이름만 뽑아서 배열로 만든 뒤 지도에 전달 */}
-                      {course.days.length > 0 && (
-  <                     CourseMap places={course.days.flatMap(day => day.schedules.map(s => s.place))} />
-                      )}
+                  {course.days.length > 0 && (
+                    <CourseMap places={course.days.flatMap(day => day.schedules.map(s => s.place))} />
+                  )}
 
                   <button
                     type="button"
