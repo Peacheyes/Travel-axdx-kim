@@ -103,7 +103,7 @@ function App() {
       setIsLoginOpen(true)
       return
     }
-    
+
     setAddedCourseIds((prev) => {
       if (prev.includes(courseId)) {
         return prev
@@ -316,39 +316,47 @@ function App() {
                   <h3>{course.theme}</h3>
                   <p>{course.description}</p>
 
-                <div className="day-preview">
+                {/* 기존 코드를 지우고 아래 코드로 교체하세요 */}
+                  <div className="day-preview" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '15px', marginBottom: '20px' }}>
                     {course.days.map((day) => (
-                      <div key={day.day} style={{ marginBottom: '15px' }}>
-                        <span style={{ fontWeight: 'bold', color: '#007BFF', display: 'block', marginBottom: '8px' }}>
+                      <div key={day.day} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {/* Day 표시 */}
+                        <span style={{ fontWeight: 'bold', color: '#007BFF', fontSize: '1.1em' }}>
                           {day.day}
                         </span>
                         
-                        {/* 첫 번째 장소만 보여주던 구조에서 -> 모든 장소의 최적화된 동선(노드)을 나열하도록 변경 */}
-                        {day.schedules.map((schedule, sIndex) => (
-                          <div key={sIndex} style={{ 
-                            margin: '10px 0', 
-                            paddingLeft: '10px', 
-                            borderLeft: '2px solid #eee' 
-                          }}>
-                            <p style={{ margin: '0 0 5px 0', fontWeight: '500' }}>
-                              {schedule.place} 
-                              {schedule.category && (
-                                <span style={{ fontSize: '0.8em', color: '#888', marginLeft: '5px' }}>
-                                  ({schedule.category})
-                                </span>
-                              )}
-                            </p>
-                            
-                            <div style={{ fontSize: '0.85em', color: '#666' }}>
-                              {schedule.cost > 0 && (
-                                <span style={{ marginRight: '10px' }}>💰 {schedule.cost.toLocaleString()}원</span>
-                              )}
-                              {schedule.transit && schedule.transit !== '일정 종료' && (
-                                <span>🚶‍♂️ ➡️ {schedule.transit}</span>
-                              )}
+                        {/* 세부 일정 타임라인 선 */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingLeft: '14px', borderLeft: '2px solid #e0e0e0' }}>
+                          {day.schedules.map((schedule, sIndex) => (
+                            <div key={sIndex} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              
+                              {/* 장소 이름 및 카테고리 */}
+                              <p style={{ margin: 0, fontWeight: '600', fontSize: '0.95em', lineHeight: '1.4', wordBreak: 'keep-all' }}>
+                                {schedule.place} 
+                                {schedule.category && (
+                                  <span style={{ fontSize: '0.8em', color: '#888', marginLeft: '6px', fontWeight: 'normal' }}>
+                                    {schedule.category}
+                                  </span>
+                                )}
+                              </p>
+                              
+                              {/* 예산 및 동선 (태그 스타일 적용) */}
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', fontSize: '0.85em' }}>
+                                {schedule.cost > 0 && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', background: '#fff3e0', padding: '3px 8px', borderRadius: '6px', color: '#e65100', fontWeight: '500' }}>
+                                    💰 {schedule.cost.toLocaleString()}원
+                                  </span>
+                                )}
+                                {schedule.transit && schedule.transit !== '일정 종료' && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', background: '#e3f2fd', padding: '3px 8px', borderRadius: '6px', color: '#1565c0', fontWeight: '500' }}>
+                                    🚶‍♂️ {schedule.transit}
+                                  </span>
+                                )}
+                              </div>
+                              
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>
