@@ -1,9 +1,9 @@
 // src/App.jsx
 import { useMemo, useState } from 'react'
 import TravelForm from './components/TravelForm'
-import { createRecommendations } from './lib/recommendation' // 기존 프리뷰 유지를 위해 남겨둠
+import { createRecommendations } from './lib/recommendation'
 import { calculateRecommendationMatchRate } from './lib/kpi'
-import { getSaharaRecommendation } from './api/saharaService' // 👈 1. 우리가 만든 AI 서비스 불러오기
+import { getSaharaRecommendation } from './api/saharaService'
 import CourseMap from './components/CourseMap'
 import './App.css'
 
@@ -28,7 +28,6 @@ function App() {
     password: '',
   })
 
-  // (기존 유지) 첫 화면에서 보여줄 미리보기용 더미 데이터
   const previewRecommendations = useMemo(() => {
     return createRecommendations(previewInput)
   }, [])
@@ -45,8 +44,6 @@ function App() {
 
   const matchRatePercent = Math.round(matchRate * 100)
 
-  // 👈 2. AI와 통신하기 위해 async/await 구문으로 변경
-  // 👈 기존의 지저분하게 중복된 코드를 모두 지우고 이 부분으로 덮어씌우세요!
   const handleGenerate = async (input) => {
     setIsLoading(true)
     setErrorMessage('')
@@ -61,9 +58,7 @@ function App() {
         input.concept
       )
       
-      // 고도화된 JSON 데이터를 기존 UI 모델에 맞게 변환 (데이터 정제 및 안전성 강화)
       const formattedResults = aiData.map((item, index) => {
-        // AI가 예산을 누락하거나 문자로 줬을 경우를 대비한 안전 장치 (에러 방지)
         const safeBudget = Number(item.totalBudget) || 0; 
 
         return {
@@ -75,7 +70,6 @@ function App() {
           days: (item.itinerary || []).map((dayPlan) => ({
             day: `Day ${dayPlan.day}`,
             schedules: (dayPlan.places || []).map((place) => {
-              // 개별 장소 경비도 숫자로 강제 변환
               const safeCost = Number(place.estimatedCost) || 0;
               return {
                 place: place.placeName || '장소명 없음',
@@ -108,14 +102,12 @@ function App() {
       if (prev.includes(courseId)) {
         return prev
       }
-
       return [...prev, courseId]
     })
   }
 
   const handleLoginChange = (event) => {
     const { name, value } = event.target
-
     setLoginForm((prev) => ({
       ...prev,
       [name]: value,
@@ -124,23 +116,19 @@ function App() {
 
   const handleLoginSubmit = (event) => {
     event.preventDefault()
-
     if (!loginForm.email.trim() || !loginForm.password.trim()) {
       return
     }
 
     const nickname = loginForm.email.split('@')[0]
-
     setUser({
       email: loginForm.email,
       nickname,
     })
-
     setLoginForm({
       email: '',
       password: '',
     })
-
     setIsLoginOpen(false)
   }
 
@@ -190,13 +178,11 @@ function App() {
       <section className="hero">
         <div className="hero-content">
           <p className="hero-badge">AI 기반 초개인화 큐레이션</p>
-
           <h1>
             정보의 사막에서
             <br />
             <span>나만의 여행 루트를 찾다</span>
           </h1>
-
           <p>
             목적지, 일정, 동반자, 여행 컨셉만 입력하면 Sahara가 3가지
             테마별 일정과 지도 동선을 한 번에 추천합니다.
@@ -240,18 +226,9 @@ function App() {
             </div>
 
             <div className="route-list">
-              <p>
-                <b>1</b>
-                오아시스 힐링 코스
-              </p>
-              <p>
-                <b>2</b>
-                로컬 미식 코스
-              </p>
-              <p>
-                <b>3</b>
-                액티비티 탐험 코스
-              </p>
+              <p><b>1</b> 오아시스 힐링 코스</p>
+              <p><b>2</b> 로컬 미식 코스</p>
+              <p><b>3</b> 액티비티 탐험 코스</p>
             </div>
           </div>
 
@@ -264,7 +241,6 @@ function App() {
 
       <section className="search-card" id="travel-input">
         <TravelForm onGenerate={handleGenerate} isLoading={isLoading} />
-
         {errorMessage && (
           <p className="form-errors" role="alert">
             {errorMessage}
@@ -316,44 +292,35 @@ function App() {
                   <h3>{course.theme}</h3>
                   <p>{course.description}</p>
 
-                {/* 기존 코드를 지우고 아래 코드로 교체하세요 */}
-                  <div className="day-preview" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '15px', marginBottom: '20px' }}>
+                  <div className="day-preview">
                     {course.days.map((day) => (
-                      <div key={day.day} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {/* Day 표시 */}
-                        <span style={{ fontWeight: 'bold', color: '#007BFF', fontSize: '1.1em' }}>
-                          {day.day}
-                        </span>
+                      <div key={day.day} className="day-block">
+                        <span className="day-title">{day.day}</span>
                         
-                        {/* 세부 일정 타임라인 선 */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingLeft: '14px', borderLeft: '2px solid #e0e0e0' }}>
+                        <div className="schedule-list">
                           {day.schedules.map((schedule, sIndex) => (
-                            <div key={sIndex} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                              
-                              {/* 장소 이름 및 카테고리 */}
-                              <p style={{ margin: 0, fontWeight: '600', fontSize: '0.95em', lineHeight: '1.4', wordBreak: 'keep-all' }}>
-                                {schedule.place} 
+                            <div key={sIndex} className="schedule-item">
+                              <p className="schedule-place">
+                                {schedule.place}
                                 {schedule.category && (
-                                  <span style={{ fontSize: '0.8em', color: '#888', marginLeft: '6px', fontWeight: 'normal' }}>
+                                  <span className="schedule-category">
                                     {schedule.category}
                                   </span>
                                 )}
                               </p>
                               
-                              {/* 예산 및 동선 (태그 스타일 적용) */}
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', fontSize: '0.85em' }}>
+                              <div className="schedule-tags">
                                 {schedule.cost > 0 && (
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', background: '#fff3e0', padding: '3px 8px', borderRadius: '6px', color: '#e65100', fontWeight: '500' }}>
+                                  <span className="tag cost">
                                     💰 {schedule.cost.toLocaleString()}원
                                   </span>
                                 )}
                                 {schedule.transit && schedule.transit !== '일정 종료' && (
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', background: '#e3f2fd', padding: '3px 8px', borderRadius: '6px', color: '#1565c0', fontWeight: '500' }}>
+                                  <span className="tag transit">
                                     🚶‍♂️ {schedule.transit}
                                   </span>
                                 )}
                               </div>
-                              
                             </div>
                           ))}
                         </div>
@@ -361,7 +328,6 @@ function App() {
                     ))}
                   </div>
 
-                  {/* course의 모든 장소 이름만 뽑아서 배열로 만든 뒤 지도에 전달 */}
                   {course.days.length > 0 && (
                     <CourseMap places={course.days.flatMap(day => day.schedules.map(s => s.place))} />
                   )}
@@ -390,13 +356,11 @@ function App() {
             >
               ×
             </button>
-
             <div className="login-modal-header">
               <span className="brand-icon">◎</span>
               <h2>Sahara 로그인</h2>
               <p>로그인하면 추천 코스를 내 일정에 저장할 수 있습니다.</p>
             </div>
-
             <form className="login-form" onSubmit={handleLoginSubmit}>
               <label htmlFor="email">이메일</label>
               <input
@@ -407,7 +371,6 @@ function App() {
                 onChange={handleLoginChange}
                 placeholder="example@email.com"
               />
-
               <label htmlFor="password">비밀번호</label>
               <input
                 id="password"
@@ -417,10 +380,8 @@ function App() {
                 onChange={handleLoginChange}
                 placeholder="비밀번호 입력"
               />
-
               <button type="submit">로그인</button>
             </form>
-
             <p className="login-help">
               MVP 시연용 로그인입니다. 실제 회원 인증은 향후 Supabase 또는
               Firebase로 확장할 수 있습니다.
