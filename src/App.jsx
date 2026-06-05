@@ -338,7 +338,7 @@ function App() {
                     onClick={() => handleAddCourse(course.id)}
                     disabled={isAdded}
                   >
-                    {isAdded ? '내 일정에 추가됨' : '코스 상세보기'}
+                    {isAdded ? '✅ 내 일정에 추가됨' : '🤍 내 일정에 저장하기'}
                   </button>
                 </div>
               </article>
