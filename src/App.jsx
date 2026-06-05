@@ -328,9 +328,10 @@ function App() {
                     ))}
                   </div>
 
-                  {course.days.length > 0 && (
-                    <CourseMap places={course.days.flatMap(day => day.schedules.map(s => s.place))} />
-                  )}
+                  {/* 객체 데이터 전체(장소명, 카테고리 등)를 그대로 지도에 전달! */}
+                    {course.days.length > 0 && (
+                      <CourseMap places={course.days.flatMap(day => day.schedules)} />
+                    )}
 
                   <button
                     type="button"
