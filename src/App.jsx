@@ -1,5 +1,5 @@
 // src/App.jsx
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import TravelForm from './components/TravelForm'
 import { createRecommendations } from './lib/recommendation'
 import { calculateRecommendationMatchRate } from './lib/kpi'
@@ -17,7 +17,15 @@ const previewInput = {
 
 function App() {
   const [recommendations, setRecommendations] = useState([])
-  const [addedCourseIds, setAddedCourseIds] = useState([])
+  const [addedCourseIds, setAddedCourseIds] = useState(() => {
+    const savedData = localStorage.getItem('sahara_saved_courses')
+    return savedData ? JSON.parse(savedData) : []
+  })
+
+  useEffect(() => {
+    localStorage.setItem('sahara_saved_courses', JSON.stringify(addedCourseIds))
+  }, [addedCourseIds]
+)
   const [isLoading, setIsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -43,6 +51,8 @@ function App() {
   }, [addedCourseIds.length, recommendations.length])
 
   const matchRatePercent = Math.round(matchRate * 100)
+
+  const savedCourses = recommendations.filter(course => addedCourseIds.includes(course.id))
 
   const handleGenerate = async (input) => {
     setIsLoading(true)
@@ -346,6 +356,50 @@ function App() {
           })}
         </div>
       </section>
+
+{/* 👇 Phase 3: 내 일정 보관함 (장바구니) 추가 영역 */}
+      {savedCourses.length > 0 && (
+        <section className="saved-courses-section" id="my-schedule" style={{ 
+          maxWidth: '1200px', margin: '3rem auto', padding: '2rem', 
+          backgroundColor: '#f8f9fa', borderRadius: '12px', border: '1px solid #e2e8f0' 
+        }}>
+          <div style={{ marginBottom: '1.5rem' }}>
+            <h2 style={{ fontSize: '1.5rem', color: '#1a202c', margin: '0 0 0.5rem 0' }}>🎒 내 일정 보관함</h2>
+            <p style={{ color: '#718096', margin: 0 }}>저장하신 맞춤 코스들을 확인하고 관리하세요.</p>
+          </div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            {savedCourses.map(course => (
+              <div key={course.id} style={{ 
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+                background: 'white', padding: '20px', borderRadius: '8px', 
+                boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderLeft: '4px solid #0056b3'
+              }}>
+                <div>
+                  <h4 style={{ margin: '0 0 8px 0', color: '#2d3748', fontSize: '1.1rem' }}>{course.theme}</h4>
+                  <p style={{ margin: 0, fontSize: '0.9rem', color: '#4a5568', fontWeight: '500' }}>
+                    {course.estimatedTime} <span style={{ color: '#cbd5e0', margin: '0 8px' }}>|</span> 총 {course.days.length}일 일정
+                  </p>
+                </div>
+                
+                <button
+                  onClick={() => setAddedCourseIds(prev => prev.filter(id => id !== course.id))}
+                  style={{ 
+                    background: '#fff0f2', color: '#e53e3e', border: '1px solid #fed7d7', 
+                    padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', 
+                    fontWeight: 'bold', transition: 'all 0.2s' 
+                  }}
+                  onMouseOver={(e) => e.target.style.background = '#fed7d7'}
+                  onMouseOut={(e) => e.target.style.background = '#fff0f2'}
+                >
+                  삭제하기
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+      {/* 👆 내 일정 보관함 영역 끝 */}
 
       {isLoginOpen && (
         <div className="login-modal-backdrop">
