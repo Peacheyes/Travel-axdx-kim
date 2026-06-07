@@ -1,398 +1,313 @@
-// src/pages/AdminPage.jsx (UI 수리 버전)
-import { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { supabase } from '../lib/supabaseClient';
-import { 
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend, CartesianGrid, BarChart, Bar
-} from 'recharts';
+// src/pages/MainPage.jsx
+import { useMemo, useState, useEffect } from 'react'
+import TravelForm from '../components/TravelForm'
+import { createRecommendations } from '../lib/recommendation'
+import { calculateRecommendationMatchRate } from '../lib/kpi'
+import { getSaharaRecommendation } from '../api/saharaService'
+import CourseMap from '../components/CourseMap'
+import { supabase } from '../lib/supabaseClient'
+import '../App.css'
 
-export default function AdminPage() {
-  const [savedCourses, setSavedCourses] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+const previewInput = {
+  destination: '제주도',
+  startDate: '2026-06-12',
+  endDate: '2026-06-14',
+  companion: '친구',
+  concept: '힐링',
+}
+
+function MainPage() {
+  // 💡 프리뷰 데이터를 아예 초기 상태로 넣어서 처음부터 편집이 가능하게 만듭니다.
+  const [recommendations, setRecommendations] = useState(() => createRecommendations(previewInput))
   
-  // 🔐 보안 로직 상태 변수
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [passwordInput, setPasswordInput] = useState('');
-  const [loginError, setLoginError] = useState('');
+  const [addedCourseIds, setAddedCourseIds] = useState(() => {
+    const savedData = localStorage.getItem('sahara_saved_courses')
+    return savedData ? JSON.parse(savedData) : []
+  })
 
-  // 🧭 좌측 메뉴 네비게이션 상태 관리 (현재 보고 있는 탭)
-  const [activeMenu, setActiveMenu] = useState('overview');
-
-  const fetchCloudData = async () => {
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('saved_courses')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setSavedCourses(data || []);
-    } catch (error) {
-      console.error('Supabase 데이터 로딩 실패:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const [currentConcept, setCurrentConcept] = useState(previewInput.concept)
+  const [isLoading, setIsLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+  const [isLoginOpen, setIsLoginOpen] = useState(false)
+  const [user, setUser] = useState(null)
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' })
 
   useEffect(() => {
-    if (sessionStorage.getItem('sahara_admin_auth') === 'true') {
-      setIsAuthenticated(true);
-    }
-    fetchCloudData();
-  }, []);
+    localStorage.setItem('sahara_saved_courses', JSON.stringify(addedCourseIds))
+  }, [addedCourseIds])
 
-  const handleLogin = (e) => {
-    e.preventDefault();
-    if (passwordInput === 'sahara2026') {
-      setIsAuthenticated(true);
-      sessionStorage.setItem('sahara_admin_auth', 'true');
-      setLoginError('');
-    } else {
-      setLoginError('비밀번호가 일치하지 않습니다.');
-    }
-  };
+  const matchRate = useMemo(() => {
+    return calculateRecommendationMatchRate(addedCourseIds.length, recommendations.length)
+  }, [addedCourseIds.length, recommendations.length])
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    sessionStorage.removeItem('sahara_admin_auth');
-    setPasswordInput('');
-  };
+  const matchRatePercent = Math.round(matchRate * 100)
+  const savedCourses = recommendations.filter(course => addedCourseIds.includes(course.id))
 
-  // 💾 엑셀(CSV) 다운로드 기능
-  const downloadCSV = () => {
-    const headers = ['ID', '테마명', '컨셉', '총 예산', '저장 일시'];
-    const rows = savedCourses.map(course => [
-      course.id,
-      `"${course.theme}"`, 
-      course.concept,
-      course.total_budget,
-      course.created_at
-    ]);
+  // --- 🛠️ 1. 일정 순서 위/아래 이동 함수 ---
+  const moveSchedule = (courseId, dayIndex, scheduleIndex, direction) => {
+    setRecommendations(prev => prev.map(course => {
+      if (course.id !== courseId) return course;
+      const newDays = [...course.days];
+      const day = { ...newDays[dayIndex] };
+      const newSchedules = [...day.schedules];
 
-    const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); 
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `sahara_data_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+      if (direction === 'up' && scheduleIndex > 0) {
+        [newSchedules[scheduleIndex - 1], newSchedules[scheduleIndex]] = [newSchedules[scheduleIndex], newSchedules[scheduleIndex - 1]];
+      } else if (direction === 'down' && scheduleIndex < newSchedules.length - 1) {
+        [newSchedules[scheduleIndex], newSchedules[scheduleIndex + 1]] = [newSchedules[scheduleIndex + 1], newSchedules[scheduleIndex]];
+      }
 
-  // --- 데이터 가공 로직 ---
-  const pieChartData = useMemo(() => {
-    const counts = savedCourses.reduce((acc, cur) => {
-      acc[cur.concept] = (acc[cur.concept] || 0) + 1;
-      return acc;
-    }, {});
-    return Object.keys(counts).map(key => ({ name: key, value: counts[key] })).sort((a, b) => b.value - a.value);
-  }, [savedCourses]);
-
-  const areaChartData = useMemo(() => {
-    const last7Days = [...Array(7)].map((_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      return d.toISOString().split('T')[0];
-    }).reverse();
-
-    const counts = savedCourses.reduce((acc, cur) => {
-      const date = cur.created_at.split('T')[0];
-      acc[date] = (acc[date] || 0) + 1;
-      return acc;
-    }, {});
-
-    return last7Days.map(date => ({
-      date: date.slice(5).replace('-', '.'), 
-      세션: counts[date] || 0 
+      day.schedules = newSchedules;
+      newDays[dayIndex] = day;
+      return { ...course, days: newDays };
     }));
-  }, [savedCourses]);
+  };
 
-  // 컨셉별 평균 예산 분석
-  const budgetByConceptData = useMemo(() => {
-    const stats = savedCourses.reduce((acc, cur) => {
-      if (!acc[cur.concept]) acc[cur.concept] = { total: 0, count: 0 };
-      acc[cur.concept].total += Number(cur.total_budget);
-      acc[cur.concept].count += 1;
-      return acc;
-    }, {});
+  // --- 🛠️ 2. 일정 삭제 함수 ---
+  const deleteSchedule = (courseId, dayIndex, scheduleIndex) => {
+    setRecommendations(prev => prev.map(course => {
+      if (course.id !== courseId) return course;
+      const newDays = [...course.days];
+      const day = { ...newDays[dayIndex] };
+      day.schedules = day.schedules.filter((_, idx) => idx !== scheduleIndex);
+      newDays[dayIndex] = day;
+      return { ...course, days: newDays };
+    }));
+  };
 
-    return Object.keys(stats).map(key => ({
-      name: key,
-      평균예산: Math.round(stats[key].total / stats[key].count)
-    })).sort((a, b) => b.평균예산 - a.평균예산);
-  }, [savedCourses]);
+  // --- 🛠️ 3. 새 장소 추가 함수 ---
+  const addSchedule = (courseId, dayIndex) => {
+    const newPlaceName = window.prompt("추가할 장소 이름을 입력하세요:");
+    if (!newPlaceName || newPlaceName.trim() === '') return;
 
-  // 구글 애널리틱스 스타일 컬러 팔레트
-  const COLORS = ['#1a73e8', '#34a853', '#fbbc04', '#ea4335', '#5f6368'];
+    setRecommendations(prev => prev.map(course => {
+      if (course.id !== courseId) return course;
+      const newDays = [...course.days];
+      const day = { ...newDays[dayIndex] };
+      day.schedules = [...day.schedules, {
+        place: newPlaceName,
+        category: '⭐ 직접 추가',
+        transit: '',
+        cost: 0
+      }];
+      newDays[dayIndex] = day;
+      return { ...course, days: newDays };
+    }));
+  };
 
-  const totalSaved = savedCourses.length;
-  const averageBudget = totalSaved > 0 
-    ? Math.round(savedCourses.reduce((sum, item) => sum + Number(item.total_budget), 0) / totalSaved)
-    : 0;
-  const topConcept = pieChartData.length > 0 ? pieChartData[0].name : '-';
+  // AI 코스 생성
+  const handleGenerate = async (input) => {
+    setIsLoading(true)
+    setErrorMessage('')
+    setCurrentConcept(input.concept || '일반')
 
-  // --- 🛠️ UI 수리: schedule-item의 렌더링 함수를 정의합니다 ---
-  const renderScheduleItem = (courseId, dIndex, sIndex, schedule, day) => (
-    <div key={sIndex} className="schedule-item" style={{ 
-      background: 'white', 
-      padding: '16px', // 여백 늘림
-      borderRadius: '8px', 
-      marginBottom: '10px', 
-      border: '1px solid #e2e8f0', 
-      display: 'flex', 
-      justifyContent: 'space-between', 
-      alignItems: 'center',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.05)' // 가벼운 그림자 추가
-    }}>
+    try {
+      const scheduleText = `${input.startDate} 부터 ${input.endDate} 까지`
+      const aiData = await getSaharaRecommendation(input.destination, scheduleText, input.companion, input.concept)
       
-      {/* 👈 좌측: 장소 정보 (schedule-info) */}
-      <div className="schedule-info" style={{ flex: 1 }}>
-        <p className="schedule-place" style={{ margin: '0 0 6px 0', fontWeight: '600', color: '#1a202c', fontSize: '1rem' }}>
-          {schedule.place}
-          {schedule.category && (
-            <span style={{ fontSize: '0.8rem', color: '#718096', marginLeft: '10px', fontWeight: 'normal' }}>
-              ({schedule.category})
-            </span>
-          )}
-        </p>
-        <div style={{ fontSize: '0.85rem', color: '#4a5568', display: 'flex', gap: '15px' }}>
-          {schedule.cost > 0 && <span>💰 {schedule.cost.toLocaleString()}원</span>}
-          {schedule.transit && <span>🚶‍♂️ {schedule.transit}</span>}
-        </div>
-      </div>
+      const formattedResults = aiData.map((item, index) => {
+        const safeBudget = Number(item.totalBudget) || 0; 
+        const uniqueId = `ai-course-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 5)}`;
 
-      {/* 👉 우측: 편집 컨트롤러 (schedule-controls) */}
-      {/* 💡 전문적인 느낌을 위해 FontAwesome 아이콘 사용을 제안합니다 (폰트 설치 필요) */}
-      <div className="schedule-controls" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-        <button 
-          onClick={() => moveSchedule(courseId, dIndex, sIndex, 'up')} 
-          disabled={sIndex === 0} 
-          style={{ 
-            padding: '6px 10px', 
-            background: sIndex === 0 ? '#edf2f7' : '#f1f3f4', // 색상 변경
-            color: sIndex === 0 ? '#cbd5e0' : '#4a5568', // 색상 변경
-            border: 'none', 
-            borderRadius: '4px', 
-            cursor: sIndex === 0 ? 'not-allowed' : 'pointer',
-            fontSize: '0.85rem'
-          }}
-        >
-          🔼 {/* <i className="fa-solid fa-chevron-up"></i> */}
-        </button>
-        <button 
-          onClick={() => moveSchedule(courseId, dIndex, sIndex, 'down')} 
-          disabled={sIndex === day.schedules.length - 1} 
-          style={{ 
-            padding: '6px 10px', 
-            background: sIndex === day.schedules.length - 1 ? '#edf2f7' : '#f1f3f4', // 색상 변경
-            color: sIndex === day.schedules.length - 1 ? '#cbd5e0' : '#4a5568', // 색상 변경
-            border: 'none', 
-            borderRadius: '4px', 
-            cursor: sIndex === day.schedules.length - 1 ? 'not-allowed' : 'pointer',
-            fontSize: '0.85rem'
-          }}
-        >
-          🔽 {/* <i className="fa-solid fa-chevron-down"></i> */}
-        </button>
-        <button 
-          onClick={() => deleteSchedule(courseId, dIndex, sIndex)} 
-          style={{ 
-            padding: '6px 10px', 
-            background: '#fff0f2', 
-            color: '#e53e3e', 
-            border: 'none', 
-            borderRadius: '4px', 
-            cursor: 'pointer',
-            fontSize: '0.85rem',
-            marginLeft: '6px' // 여백 추가
-          }}
-        >
-          ❌ {/* <i className="fa-solid fa-trash-can"></i> */}
-        </button>
-      </div>
-    </div>
-  );
+        return {
+          id: uniqueId,
+          influencerCourse: false,
+          estimatedTime: `예상 총 경비: ${safeBudget.toLocaleString()}원`,
+          theme: item.themeName || '맞춤 테마',
+          description: item.themeDescription || '',
+          days: (item.itinerary || []).map((dayPlan) => ({
+            day: `Day ${dayPlan.day}`,
+            schedules: (dayPlan.places || []).map((place) => ({
+              place: place.placeName || '장소명 없음',
+              category: place.category || '',
+              transit: place.transitInfo || '',
+              cost: Number(place.estimatedCost) || 0
+            }))
+          }))
+        }
+      })
 
-  // --- 장소 추가 버튼 스타일 수정 ---
-  const renderAddButton = (courseId, dIndex) => (
-    <button 
-      onClick={() => addSchedule(courseId, dIndex)} 
-      style={{ 
-        width: '100%', 
-        padding: '12px', 
-        background: 'transparent', 
-        border: '1px dashed #cbd5e0', 
-        color: '#718096', 
-        borderRadius: '6px', 
-        cursor: 'pointer', 
-        marginTop: '10px', 
-        fontWeight: '600',
-        fontSize: '0.9rem',
-        transition: 'all 0.2s',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '8px'
-      }}
-      onMouseOver={(e) => {
-        e.target.style.background = '#e8f0fe';
-        e.target.style.color = '#1a73e8';
-        e.target.style.border = '1px dashed #a0aec0';
-      }}
-      onMouseOut={(e) => {
-        e.target.style.background = 'transparent';
-        e.target.style.color = '#718096';
-        e.target.style.border = '1px dashed #cbd5e0';
-      }}
-    >
-      ➕ 이 날짜에 장소 추가하기 {/* <i className="fa-solid fa-plus-circle"></i> */}
-    </button>
-  );
+      setRecommendations(formattedResults)
+      setAddedCourseIds([]) 
+    } catch (error) {
+      console.error("AI 생성 에러:", error)
+      setErrorMessage('코스 최적화 중 문제가 발생했습니다. 다시 시도해주세요.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-  // 메뉴 리스트 정의
-  const menus = [
-    { id: 'overview', label: '📊 잠재고객 개요' },
-    { id: 'logs', label: '👥 전체 활동 로그' },
-    { id: 'stats', label: '📈 컨셉별 상세 통계' },
-  ];
+  // 코스 저장 (DB INSERT)
+  const handleAddCourse = async (courseId) => {
+    if (!user) { setIsLoginOpen(true); return; }
+    if (addedCourseIds.includes(courseId)) return;
 
-  // 🚧 로그인 화면
-  if (!isAuthenticated) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f1f3f4', fontFamily: 'Pretendard, sans-serif' }}>
-        <div style={{ background: 'white', padding: '40px', borderRadius: '8px', border: '1px solid #dadce0', textAlign: 'center', width: '100%', maxWidth: '400px' }}>
-          <div style={{ fontSize: '2rem', color: '#1a73e8', marginBottom: '10px', fontWeight: 'bold' }}>◎ Sahara Analytics</div>
-          <h2 style={{ color: '#202124', fontSize: '1.2rem', marginBottom: '30px', fontWeight: '500' }}>관리자 계정으로 로그인</h2>
-          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <input
-              type="password"
-              placeholder="비밀번호를 입력하세요"
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              style={{ padding: '12px', border: '1px solid #dadce0', borderRadius: '4px', fontSize: '1rem' }}
-            />
-            <button type="submit" style={{ padding: '12px', background: '#1a73e8', color: 'white', border: 'none', borderRadius: '4px', fontSize: '1rem', cursor: 'pointer', fontWeight: '500' }}>
-              로그인
-            </button>
-          </form>
-          {loginError && <p style={{ color: '#ea4335', marginTop: '15px', fontSize: '0.9rem' }}>{loginError}</p>}
-        </div>
-      </div>
-    );
+    const selectedCourse = recommendations.find(c => c.id === courseId)
+    if (!selectedCourse) return
+
+    const budgetString = selectedCourse.estimatedTime.replace(/[^0-9]/g, '')
+    const numericBudget = Number(budgetString) || 0
+
+    try {
+      const { error } = await supabase.from('saved_courses').insert([
+        { id: courseId, theme: selectedCourse.theme, concept: currentConcept, total_budget: numericBudget }
+      ])
+      if (error) throw error
+      setAddedCourseIds((prev) => [...prev, courseId])
+      alert('코스가 클라우드 데이터베이스에 안전하게 저장되었습니다! 🎒')
+    } catch (error) {
+      alert('데이터베이스 연결 중 문제가 발생했습니다. 로컬 상태로만 저장됩니다.')
+      setAddedCourseIds((prev) => [...prev, courseId])
+    }
+  }
+
+  const handleLoginSubmit = (e) => {
+    e.preventDefault();
+    if (!loginForm.email.trim() || !loginForm.password.trim()) return;
+    setUser({ email: loginForm.email, nickname: loginForm.email.split('@')[0] });
+    setLoginForm({ email: '', password: '' });
+    setIsLoginOpen(false);
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f1f3f4', fontFamily: 'Roboto, Pretendard, sans-serif' }}>
-      
-      {/* 👈 좌측 사이드바 (LNB) */}
-      <aside style={{ width: '240px', backgroundColor: '#ffffff', borderRight: '1px solid #dadce0', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '20px', borderBottom: '1px solid #dadce0', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontSize: '1.5rem', color: '#1a73e8' }}>◎</span>
-          <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#5f6368' }}>Sahara Insight</span>
-        </div>
-        <nav style={{ padding: '15px 0', flex: 1 }}>
-          {menus.map((menu) => (
-            <div 
-              key={menu.id}
-              onClick={() => setActiveMenu(menu.id)}
-              style={{ 
-                padding: '12px 20px', 
-                cursor: 'pointer',
-                backgroundColor: activeMenu === menu.id ? '#e8f0fe' : 'transparent', 
-                color: activeMenu === menu.id ? '#1a73e8' : '#5f6368', 
-                fontWeight: activeMenu === menu.id ? 'bold' : 'normal',
-                borderTopRightRadius: '20px', 
-                borderBottomRightRadius: '20px', 
-                width: '90%',
-                transition: 'all 0.2s'
-              }}
-            >
-              {menu.label}
-            </div>
-          ))}
+    <main className="app">
+      <header className="nav">
+        <div className="brand"><span className="brand-icon">◎</span><strong>Sahara</strong></div>
+        <nav className="nav-menu">
+          <a href="#travel-input">AI 코스추천</a>
+          <a href="#recommendations">인플루언서 코스</a>
         </nav>
-        <div style={{ padding: '20px', borderTop: '1px solid #dadce0' }}>
-          <button onClick={handleLogout} style={{ width: '100%', padding: '10px', background: 'none', border: '1px solid #dadce0', borderRadius: '4px', color: '#5f6368', cursor: 'pointer' }}>
-            로그아웃
-          </button>
+        <div className="nav-actions">
+          {user ? (
+            <div className="user-menu"><span>{user.nickname}님</span><button type="button" onClick={() => {setUser(null); setAddedCourseIds([]);}}>로그아웃</button></div>
+          ) : (
+            <button type="button" className="login-button" onClick={() => setIsLoginOpen(true)}>로그인</button>
+          )}
         </div>
-      </aside>
+      </header>
 
-      {/* 👉 메인 콘텐츠 영역 */}
-      <main style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
-        
-        {/* 상단 컨트롤러 바 */}
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', backgroundColor: 'white', padding: '15px 24px', borderRadius: '8px', border: '1px solid #dadce0' }}>
-          <h1 style={{ margin: 0, fontSize: '1.2rem', color: '#202124', fontWeight: '500' }}>
-            {menus.find(m => m.id === activeMenu)?.label.substring(3)}
-          </h1>
-          <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-            <span style={{ color: '#5f6368', fontSize: '0.9rem' }}>상태: 실시간 연동됨</span>
-            <button onClick={fetchCloudData} style={{ padding: '6px 12px', backgroundColor: '#fff', border: '1px solid #dadce0', borderRadius: '4px', color: '#1a73e8', cursor: 'pointer', fontSize: '0.9rem' }}>
-              새로고침
-            </button>
-            <Link to="/" style={{ color: '#1a73e8', textDecoration: 'none', fontSize: '0.9rem', fontWeight: '500' }}>고객 화면 ➡️</Link>
-          </div>
-        </header>
+      {/* Hero & Form 생략 없이 기존 유지 */}
+      <section className="hero">
+        <div className="hero-content">
+          <p className="hero-badge">AI 기반 초개인화 큐레이션</p>
+          <h1>정보의 사막에서<br/><span>나만의 여행 루트를 찾다</span></h1>
+        </div>
+      </section>
 
-        {/* 탭 1. 잠재고객 개요 (대시보드 + 수리된 코스 편집기) */}
-        {activeMenu === 'overview' && (
-          <>
-            {/* KPI 카드 행, 시계열 차트, 파이 차트 유지 */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '20px' }}>
-              {/* KPI 카드들 생략... */}
-            </div>
+      <section className="search-card" id="travel-input">
+        <TravelForm onGenerate={handleGenerate} isLoading={isLoading} />
+        {errorMessage && <p className="form-errors" role="alert">{errorMessage}</p>}
+      </section>
 
-            {/* 시계열 히어로 차트 유지... */}
-            
-            {/* 파이 차트 유지... */}
+      <section className="recommendation-section" id="recommendations">
+        <div className="section-heading">
+          <h2>5초 만에 완성된 <span>3가지 맞춤 코스</span></h2>
+          <p>마음에 들지 않는 일정은 직접 수정하고 추가해 보세요!</p>
+        </div>
 
-            {/* 🛠️ 수리된 코스 편집기 영역 */}
-            <section className="recommendation-section" id="recommendations" style={{ marginTop: '30px' }}>
-              <div className="section-heading" style={{ marginBottom: '25px' }}>
-                <h2 style={{ fontSize: '1.2rem', color: '#202124', fontWeight: '500' }}>코스 세부 일정 편집</h2>
-                <p style={{ color: '#5f6368', fontSize: '0.9rem', margin: 0 }}>각 날짜의 장소를 드래그 앤 드롭으로 편집하거나 직접 추가/삭제할 수 있습니다.</p>
-              </div>
+        <div className="recommendation-grid">
+          {recommendations.map((course, index) => {
+            const isAdded = addedCourseIds.includes(course.id)
+            const imageClass = ['oasis', 'food', 'activity'][index] || 'oasis'
 
-              <div className="recommendation-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
-                {savedCourses.slice(0, 3).map((course, index) => { // 최근 3개 코스만 보여줌
-                  return (
-                    <article className="recommendation-card" key={course.id} style={{ background: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #dadce0' }}>
-                      <div className="course-content">
-                        <p className="course-meta" style={{ color: '#80868b', fontSize: '0.85rem' }}>◎ {course.created_at.split('T')[0]} 저장됨</p>
-                        <h3 style={{ fontSize: '1.1rem', color: '#1a202c', marginBottom: '15px' }}>{course.theme}</h3>
+            return (
+              <article className="recommendation-card" key={course.id}>
+                <div className={`course-image ${imageClass}`}></div>
+                <div className="course-content">
+                  <p className="course-meta">◎ {course.estimatedTime}</p>
+                  <h3>{course.theme}</h3>
+                  <p>{course.description}</p>
 
-                        <div className="day-preview">
-                          {course.days.map((day, dIndex) => (
-                            <div key={day.day} className="day-block" style={{ marginBottom: '25px', padding: '20px', background: '#f8f9fa', borderRadius: '10px', border: '1px solid #edf2f7' }}>
-                              <span className="day-title" style={{ fontSize: '1.2rem', color: '#0056b3', fontWeight: '700' }}>{day.day}</span>
+                  <div className="day-preview">
+                    {course.days.map((day, dIndex) => (
+                      <div key={day.day} className="day-block" style={{ marginBottom: '20px', padding: '15px', background: '#f8f9fa', borderRadius: '8px' }}>
+                        <span className="day-title" style={{ fontSize: '1.1rem', color: '#0056b3', fontWeight: 'bold' }}>{day.day}</span>
+                        
+                        <div className="schedule-list" style={{ marginTop: '10px' }}>
+                          {day.schedules.map((schedule, sIndex) => (
+                            // 💡 레이아웃 깨짐을 방지하는 핵심 수정 영역
+                            <div key={sIndex} className="schedule-item" style={{ 
+                              background: 'white', padding: '14px 16px', borderRadius: '8px', marginBottom: '10px', 
+                              border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', 
+                              alignItems: 'center', gap: '15px', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' 
+                            }}>
                               
-                              <div className="schedule-list" style={{ marginTop: '15px' }}>
-                                {day.schedules.map((schedule, sIndex) => renderScheduleItem(course.id, dIndex, sIndex, schedule, day))}
-                                
-                                {/* 수리된 장소 추가 버튼 사용 */}
-                                {renderAddButton(course.id, dIndex)}
+                              {/* 좌측: 장소 정보 (유연하게 줄어들도록 flex: 1, minWidth: 0 설정) */}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p className="schedule-place" style={{ 
+                                  margin: '0 0 6px 0', fontWeight: '600', color: '#1a202c', fontSize: '0.95rem',
+                                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' // 글씨가 길면 ... 으로 자르기
+                                }}>
+                                  {schedule.place}
+                                  {schedule.category && <span style={{ fontSize: '0.8rem', color: '#718096', marginLeft: '6px', fontWeight: 'normal' }}>({schedule.category})</span>}
+                                </p>
+                                <div style={{ fontSize: '0.8rem', color: '#4a5568', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                  {schedule.cost > 0 && <span>💰 {schedule.cost.toLocaleString()}원</span>}
+                                  {schedule.transit && <span>🚶‍♂️ {schedule.transit}</span>}
+                                </div>
+                              </div>
+
+                              {/* 우측: 편집 컨트롤러 (절대 줄어들지 않도록 flexShrink: 0 설정) */}
+                              <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                                <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'up')} disabled={sIndex === 0} style={{ padding: '6px 8px', background: sIndex === 0 ? '#f7fafc' : '#edf2f7', color: sIndex === 0 ? '#cbd5e0' : '#4a5568', border: 'none', borderRadius: '4px', cursor: sIndex === 0 ? 'not-allowed' : 'pointer', fontSize: '0.8rem' }}>🔼</button>
+                                <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'down')} disabled={sIndex === day.schedules.length - 1} style={{ padding: '6px 8px', background: sIndex === day.schedules.length - 1 ? '#f7fafc' : '#edf2f7', color: sIndex === day.schedules.length - 1 ? '#cbd5e0' : '#4a5568', border: 'none', borderRadius: '4px', cursor: sIndex === day.schedules.length - 1 ? 'not-allowed' : 'pointer', fontSize: '0.8rem' }}>🔽</button>
+                                <button onClick={() => deleteSchedule(course.id, dIndex, sIndex)} style={{ padding: '6px 8px', background: '#fff5f5', color: '#e53e3e', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', marginLeft: '2px' }}>❌</button>
                               </div>
                             </div>
                           ))}
+                          
+                          {/* 장소 추가 버튼 UI 개선 */}
+                          <button onClick={() => addSchedule(course.id, dIndex)} style={{ 
+                            width: '100%', padding: '12px', background: '#f8fafc', border: '1px dashed #cbd5e0', 
+                            color: '#718096', borderRadius: '8px', cursor: 'pointer', marginTop: '8px', 
+                            fontWeight: '600', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' 
+                          }}>
+                            ➕ 이 날짜에 장소 추가하기
+                          </button>
                         </div>
-
-                        {/* 기존 저장 버튼 등 유지... */}
                       </div>
-                    </article>
-                  )
-                })}
-              </div>
-            </section>
-          </>
-        )}
+                    ))}
+                  </div>
 
-        {/* 다른 탭들 (logs, stats) 유지... */}
+                  {course.days && course.days.length > 0 && (
+                    <CourseMap places={course.days.flatMap(day => day.schedules)} />
+                  )}
 
-      </main>
-    </div>
-  );
+                  <button
+                    type="button"
+                    onClick={() => handleAddCourse(course.id)}
+                    disabled={isAdded}
+                    className={`save-btn ${isAdded ? 'added' : ''}`}
+                    style={{ width: '100%', padding: '12px', borderRadius: '8px', fontWeight: 'bold', cursor: isAdded ? 'default' : 'pointer', backgroundColor: isAdded ? '#e2e8f0' : '#0056b3', color: isAdded ? '#a0aec0' : '#ffffff', border: 'none', marginTop: '1rem', transition: 'all 0.2s ease' }}
+                  >
+                    {isAdded ? '✅ 내 일정에 추가됨' : '🤍 내 일정에 저장하기'}
+                  </button>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* 로그인 모달 */}
+      {isLoginOpen && (
+        <div className="login-modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.7)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <section className="login-modal" aria-label="로그인 창" style={{ background: 'white', padding: '2rem', borderRadius: '12px', width: '90%', maxWidth: '400px', position: 'relative', zIndex: 10000, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)' }}>
+            <button type="button" onClick={() => setIsLoginOpen(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#a0aec0' }}>×</button>
+            <div className="login-modal-header" style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
+              <span className="brand-icon" style={{ fontSize: '2.5rem', color: '#0056b3' }}>◎</span>
+              <h2 style={{ margin: '10px 0 5px 0', color: '#1a202c' }}>Sahara 로그인</h2>
+            </div>
+            <form className="login-form" onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <input name="email" type="email" value={loginForm.email} onChange={(e) => setLoginForm({...loginForm, email: e.target.value})} placeholder="이메일 입력" style={{ padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '1rem' }} />
+              <input name="password" type="password" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} placeholder="비밀번호" style={{ padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '1rem' }} />
+              <button type="submit" style={{ padding: '14px', background: '#0056b3', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer' }}>로그인</button>
+            </form>
+          </section>
+        </div>
+      )}
+    </main>
+  )
 }
+
+export default MainPage
