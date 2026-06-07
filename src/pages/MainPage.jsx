@@ -5,7 +5,7 @@ import { createRecommendations } from '../lib/recommendation'
 import { calculateRecommendationMatchRate } from '../lib/kpi'
 import { getSaharaRecommendation } from '../api/saharaService'
 import CourseMap from '../components/CourseMap'
-import { supabase } from '../lib/supabaseClient' // 👈 Supabase 연결 통로 가져오기
+import { supabase } from '../lib/supabaseClient'
 import '../App.css'
 
 const previewInput = {
@@ -23,6 +23,9 @@ function MainPage() {
     return savedData ? JSON.parse(savedData) : []
   })
 
+  // 최신 선택된 여행 컨셉 상태 관리 (Supabase 저장용)
+  const [currentConcept, setCurrentConcept] = useState(previewInput.concept)
+
   useEffect(() => {
     localStorage.setItem('sahara_saved_courses', JSON.stringify(addedCourseIds))
   }, [addedCourseIds])
@@ -37,27 +40,31 @@ function MainPage() {
     password: '',
   })
 
+  // 프리뷰 추천 데이터 생성
   const previewRecommendations = useMemo(() => {
     return createRecommendations(previewInput)
   }, [])
 
+  // 표시할 데이터 정의 (새 추천이 있으면 새 데이터, 없으면 프리뷰)
   const visibleRecommendations =
     recommendations.length > 0 ? recommendations : previewRecommendations
 
   const matchRate = useMemo(() => {
     return calculateRecommendationMatchRate(
       addedCourseIds.length,
-      recommendations.length,
+      visibleRecommendations.length,
     )
-  }, [addedCourseIds.length, recommendations.length])
+  }, [addedCourseIds.length, visibleRecommendations.length])
 
   const matchRatePercent = Math.round(matchRate * 100)
 
-  const savedCourses = recommendations.filter(course => addedCourseIds.includes(course.id))
+  // 내가 저장한 코스 목록 필터링
+  const savedCourses = visibleRecommendations.filter(course => addedCourseIds.includes(course.id))
 
   const handleGenerate = async (input) => {
     setIsLoading(true)
     setErrorMessage('')
+    setCurrentConcept(input.concept || '일반') // 사용자가 선택한 컨셉 저장
 
     try {
       const scheduleText = `${input.startDate} 부터 ${input.endDate} 까지`
@@ -71,9 +78,11 @@ function MainPage() {
       
       const formattedResults = aiData.map((item, index) => {
         const safeBudget = Number(item.totalBudget) || 0; 
+        // 렌더링 오류 및 ID 중복 방지를 위한 확실한 고유 ID 생성
+        const uniqueId = `ai-course-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 5)}`;
 
         return {
-          id: `ai-course-${Date.now()}-${index}`,
+          id: uniqueId,
           influencerCourse: false,
           estimatedTime: `예상 총 경비: ${safeBudget.toLocaleString()}원`,
           theme: item.themeName || '맞춤 테마',
@@ -94,7 +103,7 @@ function MainPage() {
       })
 
       setRecommendations(formattedResults)
-      setAddedCourseIds([])
+      setAddedCourseIds([]) // 코스가 새로 생성되면 기존 추가 기록 초기화
     } catch (error) {
       console.error("AI 생성 에러 상세 로그:", error)
       setErrorMessage('코스 최적화 중 문제가 발생했습니다. 다시 시도해주세요.')
@@ -109,42 +118,39 @@ function MainPage() {
       return
     }
 
-    // 1. 현재 화면에 표시된 추천 코스들 중 사용자가 클릭한 코스의 상세 정보 찾기
+    // 이미 추가된 코스라면 중복 실행 방지
+    if (addedCourseIds.includes(courseId)) return
+
     const selectedCourse = visibleRecommendations.find(c => c.id === courseId)
     if (!selectedCourse) return
 
-    // 2. 숫자로 된 경비 데이터 추출 (정규식을 통해 '원'이나 쉼표를 제거하고 순수 숫자만 추출)
     const budgetString = selectedCourse.estimatedTime.replace(/[^0-9]/g, '')
     const numericBudget = Number(budgetString) || 0
 
     try {
-      // 3. 🚀 Supabase 실시간 데이터베이스에 데이터 집어넣기 (INSERT)
+      // Supabase 데이터베이스에 INSERT
       const { error } = await supabase
         .from('saved_courses')
         .insert([
           { 
-            id: selectedCourse.id, 
+            id: courseId, 
             theme: selectedCourse.theme, 
-            concept: previewInput.concept || '일반', // 현재 선택된 여행 컨셉
+            concept: currentConcept, 
             total_budget: numericBudget
           }
         ])
 
       if (error) throw error
 
-      // 4. DB 저장이 성공하면 화면 상태(UI) 업데이트
-      setAddedCourseIds((prev) => {
-        if (prev.includes(courseId)) return prev
-        return [...prev, courseId]
-      })
-      
+      // 🚀 [해결] DB 저장 성공 시 UI 상태 즉각 업데이트
+      setAddedCourseIds((prev) => [...prev, courseId])
       alert('코스가 클라우드 데이터베이스에 안전하게 저장되었습니다! 🎒')
 
     } catch (error) {
       console.error('Supabase 저장 실패 상세 로그:', error)
       alert('데이터베이스 연결 중 문제가 발생했습니다. 로컬 상태로만 저장됩니다.')
       
-      // 만약 네트워크나 DB 장애가 나더라도 사용자 경험이 끊기지 않도록 폴백(Fallback) 처리
+      // 폴백 처리로 로컬 상태라도 정상 반영되게 유도
       setAddedCourseIds((prev) => [...prev, courseId])
     }
   }
@@ -293,7 +299,7 @@ function MainPage() {
 
       <section className="summary-row" aria-label="추천 요약">
         <div>
-          <strong>{recommendations.length || 3}개</strong>
+          <strong>{visibleRecommendations.length}개</strong>
           <span>추천 코스</span>
         </div>
         <div>
@@ -371,15 +377,29 @@ function MainPage() {
                     ))}
                   </div>
 
-                  {/* 객체 데이터 전체(장소명, 카테고리 등)를 그대로 지도에 전달! */}
-                    {course.days.length > 0 && (
-                      <CourseMap places={course.days.flatMap(day => day.schedules)} />
-                    )}
+                  {/* 🚀 [해결] 코스별 장소 데이터를 지도 컴포넌트에 안전하게 바인딩 */}
+                  {course.days && course.days.length > 0 && (
+                    <CourseMap places={course.days.flatMap(day => day.schedules)} />
+                  )}
 
+                  {/* 🚀 [해결] 스타일링 강화 및 가시적인 버튼 상태 변화 보장 */}
                   <button
                     type="button"
                     onClick={() => handleAddCourse(course.id)}
                     disabled={isAdded}
+                    className={`save-btn ${isAdded ? 'added' : ''}`}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      fontWeight: 'bold',
+                      cursor: isAdded ? 'default' : 'pointer',
+                      backgroundColor: isAdded ? '#e2e8f0' : '#0056b3',
+                      color: isAdded ? '#a0aec0' : '#ffffff',
+                      border: 'none',
+                      marginTop: '1rem',
+                      transition: 'all 0.2s ease'
+                    }}
                   >
                     {isAdded ? '✅ 내 일정에 추가됨' : '🤍 내 일정에 저장하기'}
                   </button>
@@ -390,7 +410,7 @@ function MainPage() {
         </div>
       </section>
 
-{/* 👇 Phase 3: 내 일정 보관함 (장바구니) 추가 영역 */}
+      {/* 내 일정 보관함 (장바구니) 추가 영역 */}
       {savedCourses.length > 0 && (
         <section className="saved-courses-section" id="my-schedule" style={{ 
           maxWidth: '1200px', margin: '3rem auto', padding: '2rem', 
@@ -432,7 +452,6 @@ function MainPage() {
           </div>
         </section>
       )}
-      {/* 👆 내 일정 보관함 영역 끝 */}
 
       {isLoginOpen && (
         <div className="login-modal-backdrop">
