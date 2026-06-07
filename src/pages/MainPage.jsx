@@ -225,43 +225,31 @@ function MainPage() {
                         
                         <div className="schedule-list" style={{ marginTop: '10px' }}>
                           {day.schedules.map((schedule, sIndex) => (
-                            // 💡 레이아웃 깨짐을 방지하는 핵심 수정 영역
-                            <div key={sIndex} className="schedule-item" style={{ 
-                              background: 'white', padding: '14px 16px', borderRadius: '8px', marginBottom: '10px', 
-                              border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', 
-                              alignItems: 'center', gap: '15px', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' 
-                            }}>
+                            <div key={sIndex} className="schedule-item" style={{ background: 'white', padding: '12px', borderRadius: '6px', marginBottom: '8px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               
-                              {/* 좌측: 장소 정보 (유연하게 줄어들도록 flex: 1, minWidth: 0 설정) */}
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <p className="schedule-place" style={{ 
-                                  margin: '0 0 6px 0', fontWeight: '600', color: '#1a202c', fontSize: '0.95rem',
-                                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' // 글씨가 길면 ... 으로 자르기
-                                }}>
+                              {/* 좌측: 장소 정보 */}
+                              <div>
+                                <p className="schedule-place" style={{ margin: '0 0 5px 0', fontWeight: 'bold', color: '#2d3748' }}>
                                   {schedule.place}
-                                  {schedule.category && <span style={{ fontSize: '0.8rem', color: '#718096', marginLeft: '6px', fontWeight: 'normal' }}>({schedule.category})</span>}
+                                  {schedule.category && <span style={{ fontSize: '0.8rem', color: '#718096', marginLeft: '8px', fontWeight: 'normal' }}>{schedule.category}</span>}
                                 </p>
-                                <div style={{ fontSize: '0.8rem', color: '#4a5568', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                                  {schedule.cost > 0 && <span>💰 {schedule.cost.toLocaleString()}원</span>}
+                                <div style={{ fontSize: '0.8rem', color: '#a0aec0' }}>
+                                  {schedule.cost > 0 && <span style={{ marginRight: '10px' }}>💰 {schedule.cost.toLocaleString()}원</span>}
                                   {schedule.transit && <span>🚶‍♂️ {schedule.transit}</span>}
                                 </div>
                               </div>
 
-                              {/* 우측: 편집 컨트롤러 (절대 줄어들지 않도록 flexShrink: 0 설정) */}
-                              <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                                <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'up')} disabled={sIndex === 0} style={{ padding: '6px 8px', background: sIndex === 0 ? '#f7fafc' : '#edf2f7', color: sIndex === 0 ? '#cbd5e0' : '#4a5568', border: 'none', borderRadius: '4px', cursor: sIndex === 0 ? 'not-allowed' : 'pointer', fontSize: '0.8rem' }}>🔼</button>
-                                <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'down')} disabled={sIndex === day.schedules.length - 1} style={{ padding: '6px 8px', background: sIndex === day.schedules.length - 1 ? '#f7fafc' : '#edf2f7', color: sIndex === day.schedules.length - 1 ? '#cbd5e0' : '#4a5568', border: 'none', borderRadius: '4px', cursor: sIndex === day.schedules.length - 1 ? 'not-allowed' : 'pointer', fontSize: '0.8rem' }}>🔽</button>
-                                <button onClick={() => deleteSchedule(course.id, dIndex, sIndex)} style={{ padding: '6px 8px', background: '#fff5f5', color: '#e53e3e', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', marginLeft: '2px' }}>❌</button>
+                              {/* 우측: 편집 컨트롤러 */}
+                              <div style={{ display: 'flex', gap: '4px' }}>
+                                <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'up')} disabled={sIndex === 0} style={{ padding: '5px', background: sIndex === 0 ? '#edf2f7' : '#e2e8f0', border: 'none', borderRadius: '4px', cursor: sIndex === 0 ? 'not-allowed' : 'pointer' }}>🔼</button>
+                                <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'down')} disabled={sIndex === day.schedules.length - 1} style={{ padding: '5px', background: sIndex === day.schedules.length - 1 ? '#edf2f7' : '#e2e8f0', border: 'none', borderRadius: '4px', cursor: sIndex === day.schedules.length - 1 ? 'not-allowed' : 'pointer' }}>🔽</button>
+                                <button onClick={() => deleteSchedule(course.id, dIndex, sIndex)} style={{ padding: '5px 8px', background: '#fff0f2', color: '#e53e3e', border: 'none', borderRadius: '4px', cursor: 'pointer', marginLeft: '4px' }}>❌</button>
                               </div>
                             </div>
                           ))}
                           
-                          {/* 장소 추가 버튼 UI 개선 */}
-                          <button onClick={() => addSchedule(course.id, dIndex)} style={{ 
-                            width: '100%', padding: '12px', background: '#f8fafc', border: '1px dashed #cbd5e0', 
-                            color: '#718096', borderRadius: '8px', cursor: 'pointer', marginTop: '8px', 
-                            fontWeight: '600', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' 
-                          }}>
+                          {/* 장소 추가 버튼 */}
+                          <button onClick={() => addSchedule(course.id, dIndex)} style={{ width: '100%', padding: '10px', background: 'transparent', border: '1px dashed #cbd5e0', color: '#718096', borderRadius: '6px', cursor: 'pointer', marginTop: '5px', fontWeight: 'bold' }}>
                             ➕ 이 날짜에 장소 추가하기
                           </button>
                         </div>
@@ -289,7 +277,7 @@ function MainPage() {
         </div>
       </section>
 
-      {/* 로그인 모달 */}
+      {/* 로그인 모달 (이전 코드와 동일 - 생략 없이 덮어씌움) */}
       {isLoginOpen && (
         <div className="login-modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.7)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <section className="login-modal" aria-label="로그인 창" style={{ background: 'white', padding: '2rem', borderRadius: '12px', width: '90%', maxWidth: '400px', position: 'relative', zIndex: 10000, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)' }}>
