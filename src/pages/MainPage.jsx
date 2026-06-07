@@ -5,6 +5,7 @@ import { createRecommendations } from '../lib/recommendation'
 import { calculateRecommendationMatchRate } from '../lib/kpi'
 import { getSaharaRecommendation } from '../api/saharaService'
 import CourseMap from '../components/CourseMap'
+import { supabase } from '../lib/supabaseClient' // 👈 Supabase 연결 통로 가져오기
 import '../App.css'
 
 const previewInput = {
@@ -102,11 +103,51 @@ function MainPage() {
     }
   }
 
-  const handleAddCourse = (courseId) => {
+ const handleAddCourse = async (courseId) => {
     if (!user) {
       setIsLoginOpen(true)
       return
     }
+
+    // 1. 현재 화면에 표시된 추천 코스들 중 사용자가 클릭한 코스의 상세 정보 찾기
+    const selectedCourse = visibleRecommendations.find(c => c.id === courseId)
+    if (!selectedCourse) return
+
+    // 2. 숫자로 된 경비 데이터 추출 (정규식을 통해 '원'이나 쉼표를 제거하고 순수 숫자만 추출)
+    const budgetString = selectedCourse.estimatedTime.replace(/[^0-9]/g, '')
+    const numericBudget = Number(budgetString) || 0
+
+    try {
+      // 3. 🚀 Supabase 실시간 데이터베이스에 데이터 집어넣기 (INSERT)
+      const { error } = await supabase
+        .from('saved_courses')
+        .insert([
+          { 
+            id: selectedCourse.id, 
+            theme: selectedCourse.theme, 
+            concept: previewInput.concept || '일반', // 현재 선택된 여행 컨셉
+            total_budget: numericBudget
+          }
+        ])
+
+      if (error) throw error
+
+      // 4. DB 저장이 성공하면 화면 상태(UI) 업데이트
+      setAddedCourseIds((prev) => {
+        if (prev.includes(courseId)) return prev
+        return [...prev, courseId]
+      })
+      
+      alert('코스가 클라우드 데이터베이스에 안전하게 저장되었습니다! 🎒')
+
+    } catch (error) {
+      console.error('Supabase 저장 실패 상세 로그:', error)
+      alert('데이터베이스 연결 중 문제가 발생했습니다. 로컬 상태로만 저장됩니다.')
+      
+      // 만약 네트워크나 DB 장애가 나더라도 사용자 경험이 끊기지 않도록 폴백(Fallback) 처리
+      setAddedCourseIds((prev) => [...prev, courseId])
+    }
+  }
 
     setAddedCourseIds((prev) => {
       if (prev.includes(courseId)) {
