@@ -1,11 +1,11 @@
 // src/App.jsx
 import { useMemo, useState, useEffect } from 'react'
-import TravelForm from './components/TravelForm'
-import { createRecommendations } from './lib/recommendation'
-import { calculateRecommendationMatchRate } from './lib/kpi'
-import { getSaharaRecommendation } from './api/saharaService'
-import CourseMap from './components/CourseMap'
-import './App.css'
+import TravelForm from '../components/TravelForm'
+import { createRecommendations } from '../lib/recommendation'
+import { calculateRecommendationMatchRate } from '../lib/kpi'
+import { getSaharaRecommendation } from '../api/saharaService'
+import CourseMap from '../components/CourseMap'
+import '../App.css'
 
 const previewInput = {
   destination: '제주도',
