@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { 
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend, CartesianGrid 
+  PieChart, Pie, Cell, Legend, CartesianGrid, BarChart, Bar
 } from 'recharts';
 
 export default function AdminPage() {
@@ -16,7 +16,9 @@ export default function AdminPage() {
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  // 1. Supabase 데이터 불러오기
+  // 🧭 좌측 메뉴 네비게이션 상태 관리 (현재 보고 있는 탭)
+  const [activeMenu, setActiveMenu] = useState('overview');
+
   const fetchCloudData = async () => {
     setIsLoading(true);
     try {
@@ -58,7 +60,29 @@ export default function AdminPage() {
     setPasswordInput('');
   };
 
-  // 2. [파이 차트용] 컨셉별 분포 데이터 가공
+  // 💾 엑셀(CSV) 다운로드 기능
+  const downloadCSV = () => {
+    const headers = ['ID', '테마명', '컨셉', '총 예산', '저장 일시'];
+    const rows = savedCourses.map(course => [
+      course.id,
+      `"${course.theme}"`, // 쉼표가 있을 수 있으므로 따옴표 처리
+      course.concept,
+      course.total_budget,
+      course.created_at
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); // 한글 깨짐 방지 BOM 추가
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `sahara_data_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // --- 데이터 가공 로직 ---
   const pieChartData = useMemo(() => {
     const counts = savedCourses.reduce((acc, cur) => {
       acc[cur.concept] = (acc[cur.concept] || 0) + 1;
@@ -67,7 +91,6 @@ export default function AdminPage() {
     return Object.keys(counts).map(key => ({ name: key, value: counts[key] })).sort((a, b) => b.value - a.value);
   }, [savedCourses]);
 
-  // 3. [시계열 차트용] 최근 7일간 일별 저장 추이 가공
   const areaChartData = useMemo(() => {
     const last7Days = [...Array(7)].map((_, i) => {
       const d = new Date();
@@ -82,15 +105,28 @@ export default function AdminPage() {
     }, {});
 
     return last7Days.map(date => ({
-      date: date.slice(5).replace('-', '.'), // '06.12' 형식으로 변환
-      세션: counts[date] || 0 // 구글 애널리틱스 느낌을 위해 라벨을 '세션'으로 지정
+      date: date.slice(5).replace('-', '.'), 
+      세션: counts[date] || 0 
     }));
   }, [savedCourses]);
 
-  // 구글 애널리틱스 스타일 컬러 팔레트
+  // 컨셉별 평균 예산 분석 (새로운 통계 기능)
+  const budgetByConceptData = useMemo(() => {
+    const stats = savedCourses.reduce((acc, cur) => {
+      if (!acc[cur.concept]) acc[cur.concept] = { total: 0, count: 0 };
+      acc[cur.concept].total += Number(cur.total_budget);
+      acc[cur.concept].count += 1;
+      return acc;
+    }, {});
+
+    return Object.keys(stats).map(key => ({
+      name: key,
+      평균예산: Math.round(stats[key].total / stats[key].count)
+    })).sort((a, b) => b.평균예산 - a.평균예산);
+  }, [savedCourses]);
+
   const COLORS = ['#1a73e8', '#34a853', '#fbbc04', '#ea4335', '#5f6368'];
 
-  // 📊 KPI 수치 계산
   const totalSaved = savedCourses.length;
   const averageBudget = totalSaved > 0 
     ? Math.round(savedCourses.reduce((sum, item) => sum + Number(item.total_budget), 0) / totalSaved)
@@ -122,7 +158,13 @@ export default function AdminPage() {
     );
   }
 
-  // 🌟 관리자 대시보드 화면 (GA 스타일)
+  // 메뉴 리스트 정의
+  const menus = [
+    { id: 'overview', label: '📊 잠재고객 개요' },
+    { id: 'logs', label: '👥 전체 활동 로그' },
+    { id: 'stats', label: '📈 컨셉별 상세 통계' },
+  ];
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f1f3f4', fontFamily: 'Roboto, Pretendard, sans-serif' }}>
       
@@ -133,12 +175,25 @@ export default function AdminPage() {
           <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#5f6368' }}>Sahara Insight</span>
         </div>
         <nav style={{ padding: '15px 0', flex: 1 }}>
-          <div style={{ padding: '12px 20px', backgroundColor: '#e8f0fe', color: '#1a73e8', fontWeight: 'bold', borderTopRightRadius: '20px', borderBottomRightRadius: '20px', width: '90%' }}>
-            📊 잠재고객 개요
-          </div>
-          <div style={{ padding: '12px 20px', color: '#5f6368', cursor: 'pointer' }}>실시간 사용자</div>
-          <div style={{ padding: '12px 20px', color: '#5f6368', cursor: 'pointer' }}>행동 흐름</div>
-          <div style={{ padding: '12px 20px', color: '#5f6368', cursor: 'pointer' }}>전환 추적</div>
+          {menus.map((menu) => (
+            <div 
+              key={menu.id}
+              onClick={() => setActiveMenu(menu.id)}
+              style={{ 
+                padding: '12px 20px', 
+                cursor: 'pointer',
+                backgroundColor: activeMenu === menu.id ? '#e8f0fe' : 'transparent', 
+                color: activeMenu === menu.id ? '#1a73e8' : '#5f6368', 
+                fontWeight: activeMenu === menu.id ? 'bold' : 'normal',
+                borderTopRightRadius: '20px', 
+                borderBottomRightRadius: '20px', 
+                width: '90%',
+                transition: 'all 0.2s'
+              }}
+            >
+              {menu.label}
+            </div>
+          ))}
         </nav>
         <div style={{ padding: '20px', borderTop: '1px solid #dadce0' }}>
           <button onClick={handleLogout} style={{ width: '100%', padding: '10px', background: 'none', border: '1px solid #dadce0', borderRadius: '4px', color: '#5f6368', cursor: 'pointer' }}>
@@ -152,114 +207,156 @@ export default function AdminPage() {
         
         {/* 상단 컨트롤러 바 */}
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', backgroundColor: 'white', padding: '15px 24px', borderRadius: '8px', border: '1px solid #dadce0' }}>
-          <h1 style={{ margin: 0, fontSize: '1.2rem', color: '#202124', fontWeight: '500' }}>잠재고객 개요</h1>
+          <h1 style={{ margin: 0, fontSize: '1.2rem', color: '#202124', fontWeight: '500' }}>
+            {menus.find(m => m.id === activeMenu)?.label.substring(3)} {/* 이모지 제거하고 타이틀 출력 */}
+          </h1>
           <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-            <span style={{ color: '#5f6368', fontSize: '0.9rem' }}>기간: 최근 7일</span>
+            <span style={{ color: '#5f6368', fontSize: '0.9rem' }}>상태: 실시간 연동됨</span>
             <button onClick={fetchCloudData} style={{ padding: '6px 12px', backgroundColor: '#fff', border: '1px solid #dadce0', borderRadius: '4px', color: '#1a73e8', cursor: 'pointer', fontSize: '0.9rem' }}>
               새로고침
             </button>
-            <Link to="/" style={{ color: '#1a73e8', textDecoration: 'none', fontSize: '0.9rem', fontWeight: '500' }}>고객 화면으로 ➡️</Link>
+            <Link to="/" style={{ color: '#1a73e8', textDecoration: 'none', fontSize: '0.9rem', fontWeight: '500' }}>고객 화면 ➡️</Link>
           </div>
         </header>
 
-        {/* 1. 히어로 차트 (시계열 트렌드) */}
-        <div style={{ background: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #dadce0', marginBottom: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-            <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#1a73e8' }}></div>
-            <h3 style={{ margin: 0, fontSize: '1rem', color: '#5f6368', fontWeight: '500' }}>세션 (누적 저장 추이)</h3>
-          </div>
-          <div style={{ height: '300px', width: '100%' }}>
-            <ResponsiveContainer>
-              <AreaChart data={areaChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorSession" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#1a73e8" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#1a73e8" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f3f4" />
-                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#80868b' }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#80868b' }} allowDecimals={false} />
-                <Tooltip contentStyle={{ borderRadius: '4px', border: '1px solid #dadce0', fontSize: '12px' }} />
-                <Area type="monotone" dataKey="세션" stroke="#1a73e8" strokeWidth={3} fillOpacity={1} fill="url(#colorSession)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        {/* 뷰 라우팅 (activeMenu 상태에 따라 다른 화면을 보여줍니다) */}
 
-        {/* 2. KPI 스파크라인 카드 행 */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '20px' }}>
-          <div style={{ background: 'white', padding: '20px', borderRadius: '8px', border: '1px solid #dadce0' }}>
-            <div style={{ fontSize: '0.85rem', color: '#5f6368', marginBottom: '8px' }}>세션 (총 저장)</div>
-            <div style={{ fontSize: '1.8rem', color: '#202124' }}>{isLoading ? '-' : totalSaved}</div>
-          </div>
-          <div style={{ background: 'white', padding: '20px', borderRadius: '8px', border: '1px solid #dadce0' }}>
-            <div style={{ fontSize: '0.85rem', color: '#5f6368', marginBottom: '8px' }}>사용자 1인당 평균 예산</div>
-            <div style={{ fontSize: '1.8rem', color: '#202124' }}>{isLoading ? '-' : `₩${averageBudget.toLocaleString()}`}</div>
-          </div>
-          <div style={{ background: 'white', padding: '20px', borderRadius: '8px', border: '1px solid #dadce0' }}>
-            <div style={{ fontSize: '0.85rem', color: '#5f6368', marginBottom: '8px' }}>인기 1위 컨셉</div>
-            <div style={{ fontSize: '1.8rem', color: '#202124' }}>{isLoading ? '-' : topConcept}</div>
-          </div>
-          <div style={{ background: 'white', padding: '20px', borderRadius: '8px', border: '1px solid #dadce0' }}>
-            <div style={{ fontSize: '0.85rem', color: '#5f6368', marginBottom: '8px' }}>데이터 무결성</div>
-            <div style={{ fontSize: '1.8rem', color: '#202124' }}>100.00%</div>
-          </div>
-        </div>
+        {/* 탭 1. 잠재고객 개요 (기존 대시보드) */}
+        {activeMenu === 'overview' && (
+          <>
+            {/* 시계열 히어로 차트 */}
+            <div style={{ background: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #dadce0', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#1a73e8' }}></div>
+                <h3 style={{ margin: 0, fontSize: '1rem', color: '#5f6368', fontWeight: '500' }}>세션 (누적 저장 추이)</h3>
+              </div>
+              <div style={{ height: '300px', width: '100%' }}>
+                <ResponsiveContainer>
+                  <AreaChart data={areaChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorSession" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#1a73e8" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#1a73e8" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f3f4" />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#80868b' }} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#80868b' }} allowDecimals={false} />
+                    <Tooltip contentStyle={{ borderRadius: '4px', border: '1px solid #dadce0', fontSize: '12px' }} />
+                    <Area type="monotone" dataKey="세션" stroke="#1a73e8" strokeWidth={3} fillOpacity={1} fill="url(#colorSession)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
 
-        {/* 3. 하단 섹션 (파이 차트 & 데이터 테이블) */}
-        <div style={{ display: 'flex', gap: '20px' }}>
-          
-          {/* 좌측: 도넛 차트 */}
-          <div style={{ flex: 1, background: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #dadce0' }}>
-            <h3 style={{ margin: '0 0 20px 0', fontSize: '1rem', color: '#5f6368', fontWeight: '500' }}>사용자 의도 분포 (컨셉)</h3>
-            <div style={{ height: '250px' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={pieChartData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value">
-                    {pieChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ fontSize: '12px' }} />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#5f6368' }} />
-                </PieChart>
-              </ResponsiveContainer>
+            {/* KPI 카드 행 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '20px' }}>
+              <div style={{ background: 'white', padding: '20px', borderRadius: '8px', border: '1px solid #dadce0' }}>
+                <div style={{ fontSize: '0.85rem', color: '#5f6368', marginBottom: '8px' }}>세션 (총 저장)</div>
+                <div style={{ fontSize: '1.8rem', color: '#202124' }}>{isLoading ? '-' : totalSaved}</div>
+              </div>
+              <div style={{ background: 'white', padding: '20px', borderRadius: '8px', border: '1px solid #dadce0' }}>
+                <div style={{ fontSize: '0.85rem', color: '#5f6368', marginBottom: '8px' }}>사용자 1인당 평균 예산</div>
+                <div style={{ fontSize: '1.8rem', color: '#202124' }}>{isLoading ? '-' : `₩${averageBudget.toLocaleString()}`}</div>
+              </div>
+              <div style={{ background: 'white', padding: '20px', borderRadius: '8px', border: '1px solid #dadce0' }}>
+                <div style={{ fontSize: '0.85rem', color: '#5f6368', marginBottom: '8px' }}>인기 1위 컨셉</div>
+                <div style={{ fontSize: '1.8rem', color: '#202124' }}>{isLoading ? '-' : topConcept}</div>
+              </div>
+              <div style={{ background: 'white', padding: '20px', borderRadius: '8px', border: '1px solid #dadce0' }}>
+                <div style={{ fontSize: '0.85rem', color: '#5f6368', marginBottom: '8px' }}>데이터 무결성</div>
+                <div style={{ fontSize: '1.8rem', color: '#202124' }}>100.00%</div>
+              </div>
+            </div>
+            
+            {/* 파이 차트 */}
+            <div style={{ background: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #dadce0' }}>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: '1rem', color: '#5f6368', fontWeight: '500' }}>사용자 의도 분포 (컨셉)</h3>
+              <div style={{ height: '250px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={pieChartData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value">
+                      {pieChartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ fontSize: '12px' }} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#5f6368' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* 탭 2. 전체 활동 로그 */}
+        {activeMenu === 'logs' && (
+          <div style={{ background: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #dadce0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', color: '#5f6368', fontWeight: '500' }}>전체 데이터베이스 조회</h3>
+              <button onClick={downloadCSV} style={{ padding: '8px 16px', backgroundColor: '#34a853', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                📥 CSV 다운로드
+              </button>
+            </div>
+            
+            <div style={{ overflowX: 'auto', border: '1px solid #dadce0', borderRadius: '4px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+                <thead style={{ backgroundColor: '#f8f9fa' }}>
+                  <tr style={{ borderBottom: '1px solid #dadce0', color: '#5f6368' }}>
+                    <th style={{ padding: '12px 16px', fontWeight: 'bold' }}>고유 ID</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 'bold' }}>테마명</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 'bold' }}>컨셉</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 'bold' }}>예산</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 'bold' }}>생성 일시</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {savedCourses.map((course) => (
+                    <tr key={course.id} style={{ borderBottom: '1px solid #f1f3f4', color: '#202124' }}>
+                      <td style={{ padding: '12px 16px', color: '#80868b', fontSize: '0.8rem' }}>{course.id.substring(0, 15)}...</td>
+                      <td style={{ padding: '12px 16px' }}>{course.theme}</td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={{ display: 'inline-block', padding: '4px 8px', borderRadius: '12px', backgroundColor: '#e8f0fe', color: '#1a73e8', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                          {course.concept}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontWeight: '500' }}>₩{Number(course.total_budget).toLocaleString()}</td>
+                      <td style={{ padding: '12px 16px', color: '#80868b' }}>{new Date(course.created_at).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {savedCourses.length === 0 && (
+                    <tr>
+                      <td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: '#80868b' }}>데이터가 없습니다.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
+        )}
 
-          {/* 우측: Raw Data 테이블 */}
-          <div style={{ flex: 2, background: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #dadce0', overflowX: 'auto' }}>
-            <h3 style={{ margin: '0 0 20px 0', fontSize: '1rem', color: '#5f6368', fontWeight: '500' }}>세부 활동 로그 (`saved_courses`)</h3>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid #dadce0', color: '#5f6368' }}>
-                  <th style={{ padding: '12px 8px', fontWeight: '500' }}>저장 일시</th>
-                  <th style={{ padding: '12px 8px', fontWeight: '500' }}>컨셉</th>
-                  <th style={{ padding: '12px 8px', fontWeight: '500' }}>테마명</th>
-                  <th style={{ padding: '12px 8px', fontWeight: '500', textAlign: 'right' }}>예산</th>
-                </tr>
-              </thead>
-              <tbody>
-                {savedCourses.slice(0, 5).map((course) => ( // 최근 5개만 노출하여 깔끔하게 유지
-                  <tr key={course.id} style={{ borderBottom: '1px solid #f1f3f4', color: '#202124' }}>
-                    <td style={{ padding: '12px 8px', color: '#80868b' }}>{course.created_at.split('T')[0]}</td>
-                    <td style={{ padding: '12px 8px' }}>
-                      <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#1a73e8', marginRight: '8px' }}></span>
-                      {course.concept}
-                    </td>
-                    <td style={{ padding: '12px 8px' }}>{course.theme}</td>
-                    <td style={{ padding: '12px 8px', textAlign: 'right', fontWeight: '500' }}>₩{Number(course.total_budget).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {savedCourses.length > 5 && (
-              <div style={{ textAlign: 'right', marginTop: '15px', color: '#1a73e8', fontSize: '0.85rem', cursor: 'pointer' }}>전체 보고서 보기 ➡️</div>
-            )}
+        {/* 탭 3. 컨셉별 상세 통계 */}
+        {activeMenu === 'stats' && (
+          <div style={{ background: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #dadce0' }}>
+            <h3 style={{ margin: '0 0 20px 0', fontSize: '1rem', color: '#5f6368', fontWeight: '500' }}>컨셉별 사용자 평균 예산</h3>
+            <div style={{ height: '400px', width: '100%' }}>
+              <ResponsiveContainer>
+                <BarChart data={budgetByConceptData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f3f4" />
+                  <XAxis dataKey="name" tick={{ fill: '#5f6368' }} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={(val) => `₩${(val/10000)}만`} tick={{ fill: '#5f6368' }} axisLine={false} tickLine={false} />
+                  <Tooltip 
+                    formatter={(value) => `₩${value.toLocaleString()}`}
+                    contentStyle={{ borderRadius: '4px', border: '1px solid #dadce0' }}
+                  />
+                  <Bar dataKey="평균예산" fill="#34a853" radius={[4, 4, 0, 0]} barSize={50} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <p style={{ textAlign: 'center', color: '#80868b', fontSize: '0.9rem', marginTop: '20px' }}>
+              어떤 컨셉의 여행객이 가장 많은 예산을 준비하는지 파악하여 고부가가치 상품(세미패키지) 기획에 활용하세요.
+            </p>
           </div>
+        )}
 
-        </div>
       </main>
     </div>
   );
