@@ -453,46 +453,42 @@ function MainPage() {
         </section>
       )}
 
+      {/* 👇 여기서부터 맨 아래 끝까지 덮어씌워주세요 👇 */}
       {isLoginOpen && (
-        <div className="login-modal-backdrop">
-          <section className="login-modal" aria-label="로그인 창">
-            <button
-              type="button"
-              className="modal-close"
-              onClick={() => setIsLoginOpen(false)}
-            >
+        <div className="login-modal-backdrop" style={{
+          position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+          backgroundColor: 'rgba(0, 0, 0, 0.7)', zIndex: 9999, // 🚀 지도를 완벽하게 덮는 핵심 설정!
+          display: 'flex', justifyContent: 'center', alignItems: 'center'
+        }}>
+          <section className="login-modal" aria-label="로그인 창" style={{
+            background: 'white', padding: '2rem', borderRadius: '12px', width: '90%', maxWidth: '400px',
+            position: 'relative', zIndex: 10000, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)'
+          }}>
+            <button type="button" onClick={() => setIsLoginOpen(false)} style={{
+              position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#a0aec0'
+            }}>
               ×
             </button>
-            <div className="login-modal-header">
-              <span className="brand-icon">◎</span>
-              <h2>Sahara 로그인</h2>
-              <p>로그인하면 추천 코스를 내 일정에 저장할 수 있습니다.</p>
+            <div className="login-modal-header" style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
+              <span className="brand-icon" style={{ fontSize: '2.5rem', color: '#0056b3' }}>◎</span>
+              <h2 style={{ margin: '10px 0 5px 0', color: '#1a202c' }}>Sahara 로그인</h2>
+              <p style={{ color: '#718096', fontSize: '0.9rem', margin: 0 }}>로그인하면 추천 코스를 내 일정에 저장할 수 있습니다.</p>
             </div>
-            <form className="login-form" onSubmit={handleLoginSubmit}>
-              <label htmlFor="email">이메일</label>
+            <form className="login-form" onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <input
-                id="email"
-                name="email"
-                type="email"
-                value={loginForm.email}
-                onChange={handleLoginChange}
-                placeholder="example@email.com"
+                name="email" type="email" value={loginForm.email} onChange={handleLoginChange}
+                placeholder="이메일 입력 (예: test@test.com)"
+                style={{ padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '1rem' }}
               />
-              <label htmlFor="password">비밀번호</label>
               <input
-                id="password"
-                name="password"
-                type="password"
-                value={loginForm.password}
-                onChange={handleLoginChange}
-                placeholder="비밀번호 입력"
+                name="password" type="password" value={loginForm.password} onChange={handleLoginChange}
+                placeholder="비밀번호 입력 (MVP 시연용 아무거나)"
+                style={{ padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '1rem' }}
               />
-              <button type="submit">로그인</button>
+              <button type="submit" style={{ padding: '14px', background: '#0056b3', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                로그인하고 저장하기
+              </button>
             </form>
-            <p className="login-help">
-              MVP 시연용 로그인입니다. 실제 회원 인증은 향후 Supabase 또는
-              Firebase로 확장할 수 있습니다.
-            </p>
           </section>
         </div>
       )}
