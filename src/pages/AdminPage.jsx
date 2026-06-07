@@ -1,25 +1,29 @@
 // src/pages/AdminPage.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '../lib/supabaseClient'; // 👈 Supabase 가져오기
+import { supabase } from '../lib/supabaseClient';
+import { 
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
+  PieChart, Pie, Cell, Legend, CartesianGrid 
+} from 'recharts';
 
 export default function AdminPage() {
   const [savedCourses, setSavedCourses] = useState([]);
-  const [isLoading, setIsLoading] = useState(true); // 로딩 상태 추가
+  const [isLoading, setIsLoading] = useState(true);
   
   // 🔐 보안 로직 상태 변수
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  // 📊 Supabase에서 실시간으로 데이터 긁어오는 함수 (SELECT)
+  // 1. Supabase 데이터 불러오기
   const fetchCloudData = async () => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from('saved_courses')
         .select('*')
-        .order('created_at', { ascending: false }); // 최신순 정렬
+        .order('created_at', { ascending: false }); // 테이블 조회를 위해 최신순 정렬
 
       if (error) throw error;
       setSavedCourses(data || []);
@@ -34,7 +38,6 @@ export default function AdminPage() {
     if (sessionStorage.getItem('sahara_admin_auth') === 'true') {
       setIsAuthenticated(true);
     }
-    // 최초 화면 진입 시 클라우드 데이터 로드
     fetchCloudData();
   }, []);
 
@@ -55,6 +58,44 @@ export default function AdminPage() {
     setPasswordInput('');
   };
 
+  // 2. [파이 차트용] 컨셉별 분포 데이터 가공
+  const pieChartData = useMemo(() => {
+    const counts = savedCourses.reduce((acc, cur) => {
+      acc[cur.concept] = (acc[cur.concept] || 0) + 1;
+      return acc;
+    }, {});
+    return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
+  }, [savedCourses]);
+
+  // 3. [바 차트용] 최근 7일간 일별 저장 추이 가공
+  const barChartData = useMemo(() => {
+    const last7Days = [...Array(7)].map((_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      return d.toISOString().split('T')[0];
+    }).reverse();
+
+    const counts = savedCourses.reduce((acc, cur) => {
+      const date = cur.created_at.split('T')[0];
+      acc[date] = (acc[date] || 0) + 1;
+      return acc;
+    }, {});
+
+    return last7Days.map(date => ({
+      date: date.slice(5), // '06-12' 형식으로 변환
+      count: counts[date] || 0
+    }));
+  }, [savedCourses]);
+
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
+
+  // 📊 상단 KPI 수치 계산
+  const totalSaved = savedCourses.length;
+  const averageBudget = totalSaved > 0 
+    ? Math.round(savedCourses.reduce((sum, item) => sum + Number(item.total_budget), 0) / totalSaved)
+    : 0;
+
+  // 🚧 로그인 화면 (인증되지 않았을 때)
   if (!isAuthenticated) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f4f7f6', fontFamily: 'Pretendard, sans-serif' }}>
@@ -82,15 +123,10 @@ export default function AdminPage() {
     );
   }
 
-  // 📊 실시간 클라우드 Raw Data 기반 지표 계산
-  const totalSaved = savedCourses.length;
-  const averageBudget = totalSaved > 0 
-    ? Math.round(savedCourses.reduce((sum, item) => sum + Number(item.total_budget), 0) / totalSaved)
-    : 0;
-
+  // 🌟 관리자 대시보드 화면 (로그인 성공 시)
   return (
     <div style={{ padding: '40px', backgroundColor: '#f4f7f6', minHeight: '100vh', fontFamily: 'Pretendard, sans-serif' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', maxWidth: '1200px', margin: '0 auto 40px auto' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', maxWidth: '1200px', margin: '0 auto' }}>
         <div>
           <span style={{ fontSize: '1.2rem', color: '#0056b3', fontWeight: 'bold' }}>◎ Sahara</span>
           <h1 style={{ margin: '5px 0 0 0', fontSize: '2rem', color: '#1a202c' }}>관리자 대시보드</h1>
@@ -109,8 +145,9 @@ export default function AdminPage() {
       </header>
 
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+        
         {/* KPI 대시보드 섹션 */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '40px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '30px' }}>
           <div style={{ background: 'white', padding: '30px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', borderTop: '4px solid #0056b3' }}>
             <h3 style={{ margin: '0 0 10px 0', color: '#718096', fontSize: '1.1rem' }}>총 누적 저장 건수 (전환량)</h3>
             <p style={{ margin: 0, fontSize: '2.5rem', fontWeight: 'bold', color: '#1a202c' }}>
@@ -122,6 +159,43 @@ export default function AdminPage() {
             <p style={{ margin: 0, fontSize: '2.5rem', fontWeight: 'bold', color: '#1a202c' }}>
               {isLoading ? '...' : `${averageBudget.toLocaleString()}원`}
             </p>
+          </div>
+        </div>
+
+        {/* 📊 차트 섹션 */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '30px' }}>
+          {/* 테마별 선호도 분포 (Pie) */}
+          <div style={{ background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+            <h3 style={{ margin: '0 0 20px 0', color: '#2d3748' }}>테마별 선호도 분포</h3>
+            <div style={{ height: '250px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={pieChartData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value">
+                    {pieChartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* 주간 저장 추이 (Bar) */}
+          <div style={{ background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+            <h3 style={{ margin: '0 0 20px 0', color: '#2d3748' }}>최근 7일간 저장 추이</h3>
+            <div style={{ height: '250px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={barChartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="date" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#0056b3" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
 
@@ -159,112 +233,8 @@ export default function AdminPage() {
             <p style={{ color: '#a0aec0', textAlign: 'center', padding: '40px 0' }}>데이터베이스가 비어 있습니다. 고객 화면에서 코스를 저장해 보세요!</p>
           )}
         </div>
-      </div>
-    </div>
-  );
-}
-
-// src/pages/AdminPage.jsx
-import { useState, useEffect, useMemo } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import { 
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend, CartesianGrid 
-} from 'recharts';
-
-export default function AdminPage() {
-  const [savedCourses, setSavedCourses] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // 1. Supabase 데이터 불러오기
-  const fetchCloudData = async () => {
-    setIsLoading(true);
-    const { data, error } = await supabase
-      .from('saved_courses')
-      .select('*')
-      .order('created_at', { ascending: true }); // 차트 정렬을 위해 오름차순 로드
-    
-    if (!error) setSavedCourses(data || []);
-    setIsLoading(false);
-  };
-
-  useEffect(() => { fetchCloudData(); }, []);
-
-  // 2. [파이 차트용] 컨셉별 분포 데이터 가공
-  const pieChartData = useMemo(() => {
-    const counts = savedCourses.reduce((acc, cur) => {
-      acc[cur.concept] = (acc[cur.concept] || 0) + 1;
-      return acc;
-    }, {});
-    return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
-  }, [savedCourses]);
-
-  // 3. [바 차트용] 최근 7일간 일별 저장 추이 가공
-  const barChartData = useMemo(() => {
-    const last7Days = [...Array(7)].map((_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      return d.toISOString().split('T')[0];
-    }).reverse();
-
-    const counts = savedCourses.reduce((acc, cur) => {
-      const date = cur.created_at.split('T')[0];
-      acc[date] = (acc[date] || 0) + 1;
-      return acc;
-    }, {});
-
-    return last7Days.map(date => ({
-      date: date.slice(5), // '06-12' 형식으로 변환
-      count: counts[date] || 0
-    }));
-  }, [savedCourses]);
-
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
-
-  return (
-    <div style={{ padding: '30px', backgroundColor: '#f8fafc' }}>
-      <h1 style={{ marginBottom: '30px' }}>Sahara Insight Dashboard</h1>
-      
-      {/* 📊 차트 그리드 섹션 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px', marginBottom: '40px' }}>
-        
-        {/* 테마별 선호도 분포 (Pie) */}
-        <div style={{ background: 'white', padding: '20px', borderRadius: '15px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
-          <h3 style={{ marginBottom: '20px', color: '#1e293b' }}>테마별 선호도 분포</h3>
-          <div style={{ height: '300px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={pieChartData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value">
-                  {pieChartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* 주간 저장 추이 (Bar) */}
-        <div style={{ background: 'white', padding: '20px', borderRadius: '15px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
-          <h3 style={{ marginBottom: '20px', color: '#1e293b' }}>최근 7일간 저장 추이</h3>
-          <div style={{ height: '300px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barChartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="date" />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="count" fill="#0056b3" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
 
       </div>
-
-      {/* 기존 테이블 데이터 영역 생략... */}
     </div>
   );
 }
