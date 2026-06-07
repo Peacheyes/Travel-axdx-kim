@@ -15,7 +15,7 @@ const previewInput = {
   concept: '힐링',
 }
 
-function ClientPage() {
+function MainPage() {
   const [recommendations, setRecommendations] = useState([])
   const [addedCourseIds, setAddedCourseIds] = useState(() => {
     const savedData = localStorage.getItem('sahara_saved_courses')
@@ -448,4 +448,4 @@ function ClientPage() {
   )
 }
 
-export default ClientPage
+export default MainPage
