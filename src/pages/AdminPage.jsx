@@ -163,3 +163,108 @@ export default function AdminPage() {
     </div>
   );
 }
+
+// src/pages/AdminPage.jsx
+import { useState, useEffect, useMemo } from 'react';
+import { supabase } from '../lib/supabaseClient';
+import { 
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
+  PieChart, Pie, Cell, Legend, CartesianGrid 
+} from 'recharts';
+
+export default function AdminPage() {
+  const [savedCourses, setSavedCourses] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // 1. Supabase 데이터 불러오기
+  const fetchCloudData = async () => {
+    setIsLoading(true);
+    const { data, error } = await supabase
+      .from('saved_courses')
+      .select('*')
+      .order('created_at', { ascending: true }); // 차트 정렬을 위해 오름차순 로드
+    
+    if (!error) setSavedCourses(data || []);
+    setIsLoading(false);
+  };
+
+  useEffect(() => { fetchCloudData(); }, []);
+
+  // 2. [파이 차트용] 컨셉별 분포 데이터 가공
+  const pieChartData = useMemo(() => {
+    const counts = savedCourses.reduce((acc, cur) => {
+      acc[cur.concept] = (acc[cur.concept] || 0) + 1;
+      return acc;
+    }, {});
+    return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
+  }, [savedCourses]);
+
+  // 3. [바 차트용] 최근 7일간 일별 저장 추이 가공
+  const barChartData = useMemo(() => {
+    const last7Days = [...Array(7)].map((_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      return d.toISOString().split('T')[0];
+    }).reverse();
+
+    const counts = savedCourses.reduce((acc, cur) => {
+      const date = cur.created_at.split('T')[0];
+      acc[date] = (acc[date] || 0) + 1;
+      return acc;
+    }, {});
+
+    return last7Days.map(date => ({
+      date: date.slice(5), // '06-12' 형식으로 변환
+      count: counts[date] || 0
+    }));
+  }, [savedCourses]);
+
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
+
+  return (
+    <div style={{ padding: '30px', backgroundColor: '#f8fafc' }}>
+      <h1 style={{ marginBottom: '30px' }}>Sahara Insight Dashboard</h1>
+      
+      {/* 📊 차트 그리드 섹션 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px', marginBottom: '40px' }}>
+        
+        {/* 테마별 선호도 분포 (Pie) */}
+        <div style={{ background: 'white', padding: '20px', borderRadius: '15px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
+          <h3 style={{ marginBottom: '20px', color: '#1e293b' }}>테마별 선호도 분포</h3>
+          <div style={{ height: '300px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={pieChartData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value">
+                  {pieChartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* 주간 저장 추이 (Bar) */}
+        <div style={{ background: 'white', padding: '20px', borderRadius: '15px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
+          <h3 style={{ marginBottom: '20px', color: '#1e293b' }}>최근 7일간 저장 추이</h3>
+          <div style={{ height: '300px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={barChartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="date" />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="count" fill="#0056b3" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+      </div>
+
+      {/* 기존 테이블 데이터 영역 생략... */}
+    </div>
+  );
+}
