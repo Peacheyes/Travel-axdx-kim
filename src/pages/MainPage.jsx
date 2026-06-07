@@ -1,4 +1,4 @@
-// src/App.jsx
+// src/pages/MainPage.jsx
 import { useMemo, useState, useEffect } from 'react'
 import TravelForm from '../components/TravelForm'
 import { createRecommendations } from '../lib/recommendation'
@@ -25,8 +25,8 @@ function MainPage() {
 
   useEffect(() => {
     localStorage.setItem('sahara_saved_courses', JSON.stringify(addedCourseIds))
-  }, [addedCourseIds]
-)
+  }, [addedCourseIds])
+
   const [isLoading, setIsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -103,7 +103,7 @@ function MainPage() {
     }
   }
 
- const handleAddCourse = async (courseId) => {
+  const handleAddCourse = async (courseId) => {
     if (!user) {
       setIsLoginOpen(true)
       return
@@ -147,14 +147,6 @@ function MainPage() {
       // 만약 네트워크나 DB 장애가 나더라도 사용자 경험이 끊기지 않도록 폴백(Fallback) 처리
       setAddedCourseIds((prev) => [...prev, courseId])
     }
-  }
-
-    setAddedCourseIds((prev) => {
-      if (prev.includes(courseId)) {
-        return prev
-      }
-      return [...prev, courseId]
-    })
   }
 
   const handleLoginChange = (event) => {
@@ -487,5 +479,6 @@ function MainPage() {
       )}
     </main>
   )
+}
 
 export default MainPage
