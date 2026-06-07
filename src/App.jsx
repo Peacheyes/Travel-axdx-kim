@@ -1,19 +1,19 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import MainPage from './pages/MainPage';
 import AdminPage from './pages/AdminPage';
 
 function App() {
   return (
-    <BrowserRouter>
+    <Router>
       <Routes>
-        {/* 기본 주소(루트) 접속 시: 고객용 AI 코스 추천 화면 */}
+        {/* 1. 맨 처음 접속했을 때 보이는 기본 주소는 무조건 고객 화면(MainPage) */}
         <Route path="/" element={<MainPage />} />
         
-        {/* /admin 주소 접속 시: 관리자 대시보드 화면 */}
+        {/* 2. 주소창 뒤에 /admin 을 붙여야만 들어갈 수 있는 관리자 화면 */}
         <Route path="/admin" element={<AdminPage />} />
       </Routes>
-    </BrowserRouter>
+    </Router>
   );
 }
 
