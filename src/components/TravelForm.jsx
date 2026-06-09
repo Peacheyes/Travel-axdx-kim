@@ -27,7 +27,7 @@ export default function TravelForm({ onGenerate, isLoading }) {
     event.preventDefault()
     setSubmitAttempted(true)
 
-    if (!validation.valid) {
+    if (!validation.valid || isLoading) {
       return
     }
 
@@ -116,7 +116,7 @@ export default function TravelForm({ onGenerate, isLoading }) {
       )}
 
       <button type="submit" disabled={isLoading}>
-        {isLoading ? '코스 생성 중...' : '코스 생성'}
+        {isLoading ? 'AI가 코스와 동선을 생성하는 중...' : '코스 생성'}
       </button>
     </form>
   )

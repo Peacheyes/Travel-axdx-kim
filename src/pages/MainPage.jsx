@@ -5,6 +5,14 @@ import { createRecommendations } from '../lib/recommendation'
 import { calculateRecommendationMatchRate } from '../lib/kpi'
 import { getSaharaRecommendation } from '../api/saharaService'
 import CourseMap from '../components/CourseMap'
+import { DAY_THEMES } from '../lib/dayThemes'
+import {
+  collectUniquePlaceNames,
+  formatAiCourse,
+  isAiGeneratedCourse,
+} from '../lib/formatCourse'
+import { getGeminiUserMessage } from '../lib/geminiErrors'
+import { fetchPlaceData, prefetchPlaceCoordinates } from '../lib/placeGeocoding'
 import { supabase } from '../lib/supabaseClient'
 import '../App.css'
 
@@ -16,49 +24,8 @@ const previewInput = {
   concept: '힐링',
 }
 
-// 🌈 일자별 테마 컬러 정의
-const DAY_THEMES = [
-  { main: '#3182ce', bg: '#ebf8ff' }, 
-  { main: '#38a169', bg: '#f0fff4' }, 
-  { main: '#dd6b20', bg: '#fffaf0' }, 
-  { main: '#805ad5', bg: '#faf5ff' }, 
-  { main: '#e53e3e', bg: '#fff5f5' }, 
-];
-
-// 🌟 [수정됨] TourAPI에서 이미지뿐만 아니라 좌표(mapx, mapy)도 함께 가져옵니다.
-const fetchTourApiData = async (keyword) => {
-  const serviceKey = import.meta.env.VITE_TOUR_API_KEY;
-  if (!serviceKey) return { img: null, mapx: null, mapy: null };
-
-  try {
-    const baseUrl = 'https://apis.data.go.kr/B551011/KorService4/searchKeyword4';
-    const params = new URLSearchParams({
-      serviceKey: serviceKey, 
-      MobileOS: 'ETC',
-      MobileApp: 'Sahara',
-      _type: 'json',
-      keyword: keyword,
-      numOfRows: '1',
-      pageNo: '1',
-    });
-
-    const response = await fetch(`${baseUrl}?${params.toString()}`);
-    const data = await response.json();
-    const item = data?.response?.body?.items?.item?.[0];
-    
-    return {
-      img: item?.firstimage || item?.firstimage2 || null,
-      mapx: item?.mapx || null, // 경도 (Longitude)
-      mapy: item?.mapy || null  // 위도 (Latitude)
-    };
-  } catch (error) {
-    console.error(`TourAPI 데이터 로드 실패 (${keyword}):`, error);
-    return { img: null, mapx: null, mapy: null };
-  }
-};
-
 function MainPage() {
-  const [recommendations, setRecommendations] = useState(() => createRecommendations(previewInput))
+  const [recommendations, setRecommendations] = useState([])
   const [addedCourseIds, setAddedCourseIds] = useState(() => {
     const savedData = localStorage.getItem('sahara_saved_courses')
     return savedData ? JSON.parse(savedData) : []
@@ -69,6 +36,7 @@ function MainPage() {
   }, [addedCourseIds])
 
   const [currentConcept, setCurrentConcept] = useState(previewInput.concept)
+  const [currentDestination, setCurrentDestination] = useState(previewInput.destination)
   const [isLoading, setIsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [isLoginOpen, setIsLoginOpen] = useState(false)
@@ -111,7 +79,7 @@ function MainPage() {
     const newPlaceName = window.prompt("추가할 장소 이름을 입력하세요:");
     if (!newPlaceName || newPlaceName.trim() === '') return;
 
-    const apiData = await fetchTourApiData(newPlaceName.trim());
+    const apiData = await fetchPlaceData(newPlaceName.trim(), currentDestination);
 
     setRecommendations(prev => prev.map(course => {
       if (course.id !== courseId) return course;
@@ -132,60 +100,30 @@ function MainPage() {
   };
 
   const handleGenerate = async (input) => {
-    setIsLoading(true); setErrorMessage(''); setCurrentConcept(input.concept || '일반');
+    if (isLoading) return
+
+    setIsLoading(true)
+    setErrorMessage('')
+    setCurrentConcept(input.concept || '일반')
+    setCurrentDestination(input.destination || '')
 
     try {
       const scheduleText = `${input.startDate} 부터 ${input.endDate} 까지`
       const aiData = await getSaharaRecommendation(input.destination, scheduleText, input.companion, input.concept)
-      
-      const formattedResults = await Promise.all(aiData.map(async (item, index) => {
-        const safeBudget = Number(item.totalBudget) || 0; 
-        
-        // 테마 이미지 검색
-        const headerApiData = await fetchTourApiData(item.themeName.split(' ')[0]);
-        const headerImage = headerApiData.img || null;
+      const uniquePlaceNames = collectUniquePlaceNames(aiData)
 
-        const daysWithImages = await Promise.all((item.itinerary || []).map(async (dayPlan) => {
-          const placesWithImages = await Promise.all((dayPlan.places || []).map(async (place) => {
-            const safeCost = Number(place.estimatedCost) || 0;
-            const currentPlaceName = place.placeName || '장소명 없음';
-            
-            // 🌟 장소별 사진 및 진짜 위치 좌표(mapx, mapy) 수집
-            const apiData = await fetchTourApiData(currentPlaceName);
+      await prefetchPlaceCoordinates(uniquePlaceNames, input.destination)
 
-            return { 
-              place: currentPlaceName, 
-              category: place.category || '관광', 
-              transit: place.transitInfo || '', 
-              cost: safeCost,
-              tourApiImg: apiData.img,
-              mapx: apiData.mapx, // 지도 경도 X
-              mapy: apiData.mapy  // 지도 위도 Y
-            };
-          }));
-
-          return {
-            day: `Day ${dayPlan.day}`,
-            schedules: placesWithImages
-          };
-        }));
-
-        return {
-          id: `ai-course-${Date.now()}-${index}`,
-          influencerCourse: false,
-          estimatedTime: `예상 총 경비: ${safeBudget.toLocaleString()}원`,
-          theme: item.themeName || '맞춤 테마',
-          description: item.themeDescription || '',
-          headerImg: headerImage,
-          days: daysWithImages
-        };
-      }));
+      const formattedResults = await Promise.all(
+        aiData.map((item, index) => formatAiCourse(item, index, input.destination)),
+      )
 
       setRecommendations(formattedResults)
       setAddedCourseIds([])
+      document.getElementById('recommendations')?.scrollIntoView({ behavior: 'smooth' })
     } catch (error) {
-      console.error("AI 생성 에러:", error)
-      setErrorMessage('코스 최적화 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.')
+      console.error('AI 생성 에러:', error)
+      setErrorMessage(getGeminiUserMessage(error))
     } finally {
       setIsLoading(false)
     }
@@ -278,7 +216,7 @@ function MainPage() {
       </section>
 
       <section className="summary-row" aria-label="추천 요약">
-        <div><strong>{recommendations.length || 3}개</strong><span>추천 코스</span></div>
+        <div><strong>{visibleRecommendations.length}개</strong><span>추천 코스</span></div>
         <div><strong>{addedCourseIds.length}개</strong><span>내 일정 추가</span></div>
         <div><strong>{matchRatePercent}%</strong><span>추천 저장률</span></div>
       </section>
@@ -292,6 +230,7 @@ function MainPage() {
         <div className="recommendation-grid">
           {visibleRecommendations.map((course, index) => {
             const isAdded = addedCourseIds.includes(course.id)
+            const isAiCourse = isAiGeneratedCourse(course.id)
             const imageClass = ['oasis', 'food', 'activity'][index] || 'oasis'
             
             const repImage = course.headerImg || `https://picsum.photos/seed/${encodeURIComponent(course.theme)}/800/400`;
@@ -348,10 +287,10 @@ function MainPage() {
 
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginLeft: 'auto', flexShrink: 0, alignSelf: 'center', minWidth: '70px' }}>
                                       <div style={{ display: 'flex', gap: '4px', background: '#f8fafc', padding: '4px', borderRadius: '6px', border: '1px solid #e2e8f0', justifyContent: 'center' }}>
-                                        <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'up')} disabled={sIndex === 0} style={{ padding: '2px 6px', background: 'transparent', border: 'none', color: sIndex === 0 ? '#cbd5e0' : '#4a5568', cursor: sIndex === 0 ? 'default' : 'pointer', fontSize: '0.8rem', margin: 0, float: 'none' }}>▲</button>
-                                        <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'down')} disabled={sIndex === day.schedules.length - 1} style={{ padding: '2px 6px', background: 'transparent', border: 'none', color: sIndex === day.schedules.length - 1 ? '#cbd5e0' : '#4a5568', cursor: sIndex === day.schedules.length - 1 ? 'default' : 'pointer', fontSize: '0.8rem', margin: 0, float: 'none' }}>▼</button>
+                                        <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'up')} disabled={!isAiCourse || sIndex === 0} style={{ padding: '2px 6px', background: 'transparent', border: 'none', color: !isAiCourse || sIndex === 0 ? '#cbd5e0' : '#4a5568', cursor: !isAiCourse || sIndex === 0 ? 'default' : 'pointer', fontSize: '0.8rem', margin: 0, float: 'none' }}>▲</button>
+                                        <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'down')} disabled={!isAiCourse || sIndex === day.schedules.length - 1} style={{ padding: '2px 6px', background: 'transparent', border: 'none', color: !isAiCourse || sIndex === day.schedules.length - 1 ? '#cbd5e0' : '#4a5568', cursor: !isAiCourse || sIndex === day.schedules.length - 1 ? 'default' : 'pointer', fontSize: '0.8rem', margin: 0, float: 'none' }}>▼</button>
                                       </div>
-                                      <button onClick={() => deleteSchedule(course.id, dIndex, sIndex)} style={{ padding: '6px', background: '#fff5f5', color: '#e53e3e', border: '1px solid #fed7d7', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold', width: '100%', margin: 0, float: 'none' }}>삭제</button>
+                                      <button onClick={() => deleteSchedule(course.id, dIndex, sIndex)} disabled={!isAiCourse} style={{ padding: '6px', background: '#fff5f5', color: '#e53e3e', border: '1px solid #fed7d7', borderRadius: '6px', cursor: !isAiCourse ? 'default' : 'pointer', fontSize: '0.75rem', fontWeight: 'bold', width: '100%', margin: 0, float: 'none', opacity: !isAiCourse ? 0.5 : 1 }}>삭제</button>
                                     </div>
                                   </div>
 
@@ -364,7 +303,7 @@ function MainPage() {
                               )
                             })}
                             
-                            <button onClick={() => addSchedule(course.id, dIndex)} style={{ 
+                            <button onClick={() => addSchedule(course.id, dIndex)} disabled={!isAiCourse} style={{ 
                               width: '100%', padding: '12px', background: 'transparent', border: '2px dashed #cbd5e0', 
                               color: '#718096', borderRadius: '8px', cursor: 'pointer', marginTop: '16px', marginBottom: '8px',
                               fontWeight: 'bold', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s', clear: 'both'
@@ -379,8 +318,16 @@ function MainPage() {
                     })}
                   </div>
 
-                  {/* 🌟 수정된 CourseMap 컴포넌트에 좌표 데이터를 넘겨줍니다 */}
-                  {course.days.length > 0 && <CourseMap places={course.days.flatMap(day => day.schedules)} />}
+                  {isAiCourse ? (
+                    <CourseMap
+                      days={course.days}
+                      dayThemes={DAY_THEMES}
+                    />
+                  ) : (
+                    <div style={{ height: '120px', width: '100%', background: '#f8fafc', borderRadius: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '16px', color: '#718096', fontWeight: '600', border: '1px dashed #cbd5e0' }}>
+                      맞춤 코스 생성 후 지도 동선이 표시됩니다.
+                    </div>
+                  )}
 
                   <button
                     type="button"
