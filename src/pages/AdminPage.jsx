@@ -58,6 +58,28 @@ export default function AdminPage() {
     setPasswordInput('');
   };
 
+  // 🌟 [추가] 실제 Supabase 데이터베이스에서 레코드를 삭제하는 함수
+  const handleDeleteCourse = async (id) => {
+    const isConfirm = window.confirm('정말로 이 데이터를 삭제하시겠습니까?\n(실제 데이터베이스에서도 영구 삭제됩니다)');
+    if (!isConfirm) return;
+
+    try {
+      const { error } = await supabase
+        .from('saved_courses')
+        .delete()
+        .eq('id', id); // 고유 ID를 기준으로 삭제
+
+      if (error) throw error;
+
+      // DB 삭제 성공 시, 화면(상태)에서도 해당 항목 즉시 제거
+      setSavedCourses(prev => prev.filter(course => course.id !== id));
+      alert('성공적으로 삭제되었습니다. 🗑️');
+    } catch (error) {
+      console.error('삭제 실패:', error);
+      alert('데이터 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
   const downloadCSV = () => {
     const headers = ['ID', '테마명', '컨셉', '총 예산', '저장 일시'];
     const rows = savedCourses.map(course => [
@@ -162,7 +184,6 @@ export default function AdminPage() {
     { id: 'stats', label: '📈 컨셉별 상세 통계' },
   ];
 
-  // 큰 숫자를 '만 원' 단위로 예쁘게 변환하는 헬퍼 함수
   const formatKoreanCurrency = (val) => {
     if (val >= 10000) return `₩${Math.floor(val / 10000).toLocaleString()}만`;
     return `₩${val.toLocaleString()}`;
@@ -288,10 +309,11 @@ export default function AdminPage() {
           </>
         )}
 
+        {/* 🌟 탭 2. 전체 활동 로그 (삭제 기능 추가) */}
         {activeMenu === 'logs' && (
           <div style={{ background: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #dadce0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 style={{ margin: 0, fontSize: '1rem', color: '#5f6368', fontWeight: '500' }}>전체 데이터베이스 조회</h3>
+              <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem', color: '#5f6368', fontWeight: '500' }}>전체 데이터베이스 조회</h3>
               <button onClick={downloadCSV} style={{ padding: '8px 16px', backgroundColor: '#34a853', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
                 📥 CSV 다운로드
               </button>
@@ -306,6 +328,7 @@ export default function AdminPage() {
                     <th style={{ padding: '12px 16px', fontWeight: 'bold' }}>컨셉</th>
                     <th style={{ padding: '12px 16px', fontWeight: 'bold' }}>예산</th>
                     <th style={{ padding: '12px 16px', fontWeight: 'bold' }}>생성 일시</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 'bold', textAlign: 'center' }}>관리</th> {/* 🌟 삭제 열 추가 */}
                   </tr>
                 </thead>
                 <tbody>
@@ -320,11 +343,33 @@ export default function AdminPage() {
                       </td>
                       <td style={{ padding: '12px 16px', fontWeight: '500' }}>₩{Number(course.total_budget || 0).toLocaleString()}</td>
                       <td style={{ padding: '12px 16px', color: '#80868b' }}>{new Date(course.created_at).toLocaleString()}</td>
+                      
+                      {/* 🌟 삭제 버튼 구현 */}
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                        <button 
+                          onClick={() => handleDeleteCourse(course.id)}
+                          style={{ 
+                            padding: '4px 10px', 
+                            backgroundColor: '#fff0f0', 
+                            color: '#ea4335', 
+                            border: '1px solid #fce8e6', 
+                            borderRadius: '4px', 
+                            cursor: 'pointer', 
+                            fontSize: '0.8rem', 
+                            fontWeight: 'bold',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseOver={(e) => e.target.style.backgroundColor = '#fce8e6'}
+                          onMouseOut={(e) => e.target.style.backgroundColor = '#fff0f0'}
+                        >
+                          삭제
+                        </button>
+                      </td>
                     </tr>
                   ))}
                   {savedCourses.length === 0 && (
                     <tr>
-                      <td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: '#80868b' }}>데이터가 없습니다.</td>
+                      <td colSpan="6" style={{ textAlign: 'center', padding: '40px', color: '#80868b' }}>데이터가 없습니다.</td>
                     </tr>
                   )}
                 </tbody>
@@ -341,8 +386,6 @@ export default function AdminPage() {
                 <BarChart data={budgetByConceptData} margin={{ top: 35, right: 30, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f3f4" />
                   <XAxis dataKey="name" tick={{ fill: '#5f6368' }} axisLine={false} tickLine={false} />
-                  
-                  {/* 🌟 수정: Y축 숫자가 00000만으로 보이는 현상 해결 & 넉넉한 width 확보 */}
                   <YAxis 
                     width={80} 
                     tickFormatter={formatKoreanCurrency} 
@@ -350,15 +393,11 @@ export default function AdminPage() {
                     axisLine={false} 
                     tickLine={false} 
                   />
-                  
                   <Tooltip 
                     formatter={(value) => `₩${value.toLocaleString()}`}
                     contentStyle={{ borderRadius: '4px', border: '1px solid #dadce0' }}
                   />
-                  
-                  {/* 🌟 수정: minPointSize=10을 주어 값이 작아도 무조건 10px 이상 렌더링되게 설정 */}
                   <Bar dataKey="평균예산" fill="#34a853" radius={[4, 4, 0, 0]} barSize={50} minPointSize={10}>
-                    {/* 🌟 수정: 바 위에 금액 텍스트 강제 고정 */}
                     <LabelList 
                       dataKey="평균예산" 
                       position="top" 
