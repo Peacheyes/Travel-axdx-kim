@@ -312,10 +312,10 @@ function MainPage() {
                         <div style={{ position: 'relative', paddingLeft: '24px', marginLeft: '12px', borderLeft: '2px solid #e2e8f0', textAlign: 'left', display: 'block' }}>
                           
                           {day.schedules.map((schedule, sIndex) => {
-                            // 🌟 이미지 Fallback 구조: TourAPI 결과가 있으면 적용하고, 없으면 기존 백업 플레이스홀더 작동
                             const finalImageSrc = schedule.tourApiImg || `https://picsum.photos/seed/${encodeURIComponent(schedule.place)}/120/120`;
 
                             return (
+                              // 💡 App.css의 클래스 충돌을 원천 차단하기 위해 className을 지우고 inline style만 사용합니다.
                               <div key={sIndex} style={{ display: 'block', textAlign: 'left', marginBottom: '0' }}>
                                 <div style={{ 
                                   position: 'relative', display: 'flex', flexDirection: 'row', alignItems: 'stretch', 
@@ -330,12 +330,12 @@ function MainPage() {
                                   
                                   {/* 썸네일 이미지 */}
                                   <img src={finalImageSrc} alt={schedule.place} style={{ 
-                                    width: '64px', height: '64px', objectFit: 'cover', borderRadius: '10px', 
+                                    width: '64px', height: '64px', minWidth: '64px', objectFit: 'cover', borderRadius: '10px', 
                                     marginRight: '16px', flexShrink: 0, display: 'block', alignSelf: 'center'
                                   }} />
 
-                                  {/* 텍스트 정보 구역 */}
-                                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, textAlign: 'left', paddingRight: '10px' }}>
+                                  {/* 텍스트 정보 구역 (글씨 잘림 방지 100% 보장) */}
+                                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, textAlign: 'left', paddingRight: '10px', justifyContent: 'center' }}>
                                     <h5 style={{ 
                                       margin: '0 0 6px 0', fontSize: '1rem', color: '#1a202c', fontWeight: 'bold', 
                                       textAlign: 'left', wordBreak: 'keep-all', overflowWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.4' 
@@ -356,12 +356,12 @@ function MainPage() {
                                   </div>
 
                                   {/* 우측 콤팩트 컨트롤 버튼 */}
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginLeft: 'auto', flexShrink: 0, alignSelf: 'center' }}>
-                                    <div style={{ display: 'flex', gap: '4px', background: '#f8fafc', padding: '4px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                                      <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'up')} disabled={sIndex === 0} style={{ padding: '2px 6px', background: 'transparent', border: 'none', color: sIndex === 0 ? '#cbd5e0' : '#4a5568', cursor: sIndex === 0 ? 'default' : 'pointer', fontSize: '0.8rem' }}>▲</button>
-                                      <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'down')} disabled={sIndex === day.schedules.length - 1} style={{ padding: '2px 6px', background: 'transparent', border: 'none', color: sIndex === day.schedules.length - 1 ? '#cbd5e0' : '#4a5568', cursor: sIndex === day.schedules.length - 1 ? 'default' : 'pointer', fontSize: '0.8rem' }}>▼</button>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginLeft: 'auto', flexShrink: 0, alignSelf: 'center', minWidth: '70px' }}>
+                                    <div style={{ display: 'flex', gap: '4px', background: '#f8fafc', padding: '4px', borderRadius: '6px', border: '1px solid #e2e8f0', justifyContent: 'center' }}>
+                                      <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'up')} disabled={sIndex === 0} style={{ padding: '2px 6px', background: 'transparent', border: 'none', color: sIndex === 0 ? '#cbd5e0' : '#4a5568', cursor: sIndex === 0 ? 'default' : 'pointer', fontSize: '0.8rem', margin: 0, float: 'none' }}>▲</button>
+                                      <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'down')} disabled={sIndex === day.schedules.length - 1} style={{ padding: '2px 6px', background: 'transparent', border: 'none', color: sIndex === day.schedules.length - 1 ? '#cbd5e0' : '#4a5568', cursor: sIndex === day.schedules.length - 1 ? 'default' : 'pointer', fontSize: '0.8rem', margin: 0, float: 'none' }}>▼</button>
                                     </div>
-                                    <button onClick={() => deleteSchedule(course.id, dIndex, sIndex)} style={{ padding: '4px', background: '#fff5f5', color: '#e53e3e', border: '1px solid #fed7d7', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold', width: '100%' }}>
+                                    <button onClick={() => deleteSchedule(course.id, dIndex, sIndex)} style={{ padding: '6px', background: '#fff5f5', color: '#e53e3e', border: '1px solid #fed7d7', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold', width: '100%', margin: 0, float: 'none' }}>
                                       삭제
                                     </button>
                                   </div>
@@ -370,7 +370,7 @@ function MainPage() {
 
                                 {/* 이동 수단 인터랙션 */}
                                 {sIndex < day.schedules.length - 1 && schedule.transit && schedule.transit !== '일정 종료' && (
-                                  <div style={{ position: 'relative', padding: '12px 0 12px 16px', display: 'flex', alignItems: 'center', textAlign: 'left', color: '#3182ce', fontSize: '0.85rem', fontWeight: 'bold' }}>
+                                  <div style={{ position: 'relative', padding: '12px 0 12px 16px', display: 'flex', alignItems: 'center', textAlign: 'left', color: '#3182ce', fontSize: '0.85rem', fontWeight: 'bold', clear: 'both' }}>
                                     <span style={{ marginRight: '8px', fontSize: '1.1rem' }}>🚕</span> {schedule.transit}
                                   </div>
                                 )}
@@ -381,7 +381,7 @@ function MainPage() {
                           <button onClick={() => addSchedule(course.id, dIndex)} style={{ 
                             width: '100%', padding: '12px', background: 'transparent', border: '2px dashed #cbd5e0', 
                             color: '#718096', borderRadius: '8px', cursor: 'pointer', marginTop: '16px', marginBottom: '8px',
-                            fontWeight: 'bold', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s'
+                            fontWeight: 'bold', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s', clear: 'both'
                           }}
                           onMouseOver={(e) => { e.target.style.background = '#f8fafc'; e.target.style.color = '#4a5568'; e.target.style.border = '2px dashed #a0aec0'; }}
                           onMouseOut={(e) => { e.target.style.background = 'transparent'; e.target.style.color = '#718096'; e.target.style.border = '2px dashed #cbd5e0'; }}>
@@ -399,7 +399,7 @@ function MainPage() {
                     onClick={() => handleAddCourse(course.id)}
                     disabled={isAdded}
                     className={`save-btn ${isAdded ? 'added' : ''}`}
-                    style={{ width: '100%', padding: '14px', borderRadius: '8px', fontWeight: 'bold', cursor: isAdded ? 'default' : 'pointer', backgroundColor: isAdded ? '#e2e8f0' : '#0056b3', color: isAdded ? '#a0aec0' : '#ffffff', border: 'none', marginTop: '1rem', transition: 'all 0.2s ease', fontSize: '1rem' }}
+                    style={{ width: '100%', padding: '14px', borderRadius: '8px', fontWeight: 'bold', cursor: isAdded ? 'default' : 'pointer', backgroundColor: isAdded ? '#e2e8f0' : '#0056b3', color: isAdded ? '#a0aec0' : '#ffffff', border: 'none', marginTop: '1rem', transition: 'all 0.2s ease', fontSize: '1rem', clear: 'both' }}
                   >
                     {isAdded ? '✅ 내 일정에 추가됨' : '🤍 내 일정에 저장하기'}
                   </button>
