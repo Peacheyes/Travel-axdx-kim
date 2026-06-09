@@ -16,6 +16,36 @@ const previewInput = {
   concept: '힐링',
 }
 
+// 🌟 TourAPI 4.0 실시간 이미지 검색 함수
+const fetchTourApiImage = async (keyword) => {
+  const serviceKey = import.meta.env.VITE_TOUR_API_KEY;
+  if (!serviceKey) return null; // 인증키가 없으면 백업 이미지 사용
+
+  try {
+    // TourAPI 4.0 국문 관광정보 서비스 (searchKeyword4) 엔드포인트
+    const baseUrl = 'https://apis.data.go.kr/B551011/KorService4/searchKeyword4';
+    const params = new URLSearchParams({
+      serviceKey: serviceKey, // 공공데이터포털 발급 키 (자동 인코딩 방지를 위해 원본 주입)
+      MobileOS: 'ETC',
+      MobileApp: 'Sahara',
+      _type: 'json',
+      keyword: keyword,
+      numOfRows: '1',
+      pageNo: '1',
+    });
+
+    const response = await fetch(`${baseUrl}?${params.toString()}`);
+    const data = await response.json();
+
+    // API 응답 구조 파싱 후 첫 번째 이미지 반환
+    const item = data?.response?.body?.items?.item?.[0];
+    return item?.firstimage || item?.firstimage2 || null;
+  } catch (error) {
+    console.error(`TourAPI 이미지 로드 실패 (${keyword}):`, error);
+    return null;
+  }
+};
+
 function MainPage() {
   const [recommendations, setRecommendations] = useState(() => createRecommendations(previewInput))
   const [addedCourseIds, setAddedCourseIds] = useState(() => {
@@ -77,20 +107,30 @@ function MainPage() {
     }));
   };
 
-  const addSchedule = (courseId, dayIndex) => {
+  const addSchedule = async (courseId, dayIndex) => {
     const newPlaceName = window.prompt("추가할 장소 이름을 입력하세요:");
     if (!newPlaceName || newPlaceName.trim() === '') return;
+
+    // 장소를 수동으로 추가할 때도 TourAPI 실시간 이미지 검색 실행
+    const fetchedImg = await fetchTourApiImage(newPlaceName.trim());
 
     setRecommendations(prev => prev.map(course => {
       if (course.id !== courseId) return course;
       const newDays = [...course.days];
       const day = { ...newDays[dayIndex] };
-      day.schedules = [...day.schedules, { place: newPlaceName, category: '⭐ 직접 추가', transit: '', cost: 0 }];
+      day.schedules = [...day.schedules, { 
+        place: newPlaceName, 
+        category: '⭐ 직접 추가', 
+        transit: '', 
+        cost: 0,
+        tourApiImg: fetchedImg // 이미지 저장
+      }];
       newDays[dayIndex] = day;
       return { ...course, days: newDays };
     }));
   };
 
+  // 🤖 AI 코스 생성 바인딩 및 TourAPI 4.0 파이프라인 결합
   const handleGenerate = async (input) => {
     setIsLoading(true)
     setErrorMessage('')
@@ -100,29 +140,48 @@ function MainPage() {
       const scheduleText = `${input.startDate} 부터 ${input.endDate} 까지`
       const aiData = await getSaharaRecommendation(input.destination, scheduleText, input.companion, input.concept)
       
-      const formattedResults = aiData.map((item, index) => {
+      // 대량의 비동기 이미지 다운로드를 병렬 처리하기 위해 Promise.all 활용
+      const formattedResults = await Promise.all(aiData.map(async (item, index) => {
         const safeBudget = Number(item.totalBudget) || 0; 
+
+        const daysWithImages = await Promise.all((item.itinerary || []).map(async (dayPlan) => {
+          const placesWithImages = await Promise.all((dayPlan.places || []).map(async (place) => {
+            const safeCost = Number(place.estimatedCost) || 0;
+            const currentPlaceName = place.placeName || '장소명 없음';
+            
+            // 🌟 생성 시점에 해당 장소의 TourAPI 이미지 룩업 수행
+            const apiImageUrl = await fetchTourApiImage(currentPlaceName);
+
+            return { 
+              place: currentPlaceName, 
+              category: place.category || '관광', 
+              transit: place.transitInfo || '', 
+              cost: safeCost,
+              tourApiImg: apiImageUrl // 데이터 모델에 영구 병합
+            };
+          }));
+
+          return {
+            day: `Day ${dayPlan.day}`,
+            schedules: placesWithImages
+          };
+        }));
+
         return {
           id: `ai-course-${Date.now()}-${index}`,
           influencerCourse: false,
           estimatedTime: `예상 총 경비: ${safeBudget.toLocaleString()}원`,
           theme: item.themeName || '맞춤 테마',
           description: item.themeDescription || '',
-          days: (item.itinerary || []).map((dayPlan) => ({
-            day: `Day ${dayPlan.day}`,
-            schedules: (dayPlan.places || []).map((place) => {
-              const safeCost = Number(place.estimatedCost) || 0;
-              return { place: place.placeName || '장소명 없음', category: place.category || '', transit: place.transitInfo || '', cost: safeCost }
-            })
-          }))
-        }
-      })
+          days: daysWithImages
+        };
+      }));
 
       setRecommendations(formattedResults)
       setAddedCourseIds([])
     } catch (error) {
-      console.error("AI 생성 에러:", error)
-      setErrorMessage('코스 최적화 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.')
+      console.error("AI 생성 및 이미지 매칭 통합 에러:", error)
+      setErrorMessage('코스 최적화 및 이미지 큐레이션 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.')
     } finally {
       setIsLoading(false)
     }
@@ -158,7 +217,6 @@ function MainPage() {
   const handleLoginSubmit = (event) => {
     event.preventDefault()
     if (!loginForm.email.trim() || !loginForm.password.trim()) return;
-
     const nickname = loginForm.email.split('@')[0]
     setUser({ email: loginForm.email, nickname })
     setLoginForm({ email: '', password: '' })
@@ -225,7 +283,7 @@ function MainPage() {
       <section className="recommendation-section" id="recommendations">
         <div className="section-heading">
           <h2>5초 만에 완성된 <span>3가지 맞춤 코스</span></h2>
-          <p>사진과 동선을 확인하고, 원하는 대로 자유롭게 코스를 편집하세요.</p>
+          <p>입력하신 조건과 취향을 바탕으로 일정표, 주요 장소, 추천 이유를 비교해보세요.</p>
         </div>
 
         <div className="recommendation-grid">
@@ -251,20 +309,17 @@ function MainPage() {
                           {day.day}
                         </h4>
                         
-                        {/* 🌟 100% 방어형 타임라인 컨테이너 (App.css 중앙 정렬 간섭 차단) */}
                         <div style={{ position: 'relative', paddingLeft: '24px', marginLeft: '12px', borderLeft: '2px solid #e2e8f0', textAlign: 'left', display: 'block' }}>
                           
                           {day.schedules.map((schedule, sIndex) => {
-                            // 여행콕콕 스타일: 장소 이름 기반 고정 썸네일
-                            const placeholderImage = `https://picsum.photos/seed/${encodeURIComponent(schedule.place)}/120/120`;
+                            // 🌟 이미지 Fallback 구조: TourAPI 결과가 있으면 적용하고, 없으면 기존 백업 플레이스홀더 작동
+                            const finalImageSrc = schedule.tourApiImg || `https://picsum.photos/seed/${encodeURIComponent(schedule.place)}/120/120`;
 
                             return (
                               <div key={sIndex} style={{ display: 'block', textAlign: 'left', marginBottom: '0' }}>
-                                {/* 개별 스케줄 카드 (가로형 배치) */}
                                 <div style={{ 
-                                  position: 'relative', display: 'flex', flexDirection: 'row', alignItems: 'center', 
-                                  padding: '16px 0', borderBottom: '1px dashed #edf2f7', textAlign: 'left',
-                                  width: '100%', boxSizing: 'border-box'
+                                  position: 'relative', display: 'flex', flexDirection: 'row', alignItems: 'stretch', 
+                                  padding: '16px 0', borderBottom: '1px dashed #edf2f7', textAlign: 'left', width: '100%', boxSizing: 'border-box'
                                 }}>
                                   
                                   {/* 타임라인 점 */}
@@ -274,27 +329,26 @@ function MainPage() {
                                   }} />
                                   
                                   {/* 썸네일 이미지 */}
-                                  <img src={placeholderImage} alt={schedule.place} style={{ 
+                                  <img src={finalImageSrc} alt={schedule.place} style={{ 
                                     width: '64px', height: '64px', objectFit: 'cover', borderRadius: '10px', 
-                                    marginRight: '16px', flexShrink: 0, display: 'block' 
+                                    marginRight: '16px', flexShrink: 0, display: 'block', alignSelf: 'center'
                                   }} />
 
-                                  {/* 텍스트 컨텐츠 (좌측 정렬 강제) */}
-                                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, textAlign: 'left' }}>
+                                  {/* 텍스트 정보 구역 */}
+                                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, textAlign: 'left', paddingRight: '10px' }}>
                                     <h5 style={{ 
-                                      margin: '0 0 4px 0', fontSize: '1rem', color: '#1a202c', fontWeight: 'bold', 
-                                      textAlign: 'left', wordBreak: 'keep-all', lineHeight: '1.3' 
+                                      margin: '0 0 6px 0', fontSize: '1rem', color: '#1a202c', fontWeight: 'bold', 
+                                      textAlign: 'left', wordBreak: 'keep-all', overflowWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.4' 
                                     }}>
                                       {schedule.place}
                                     </h5>
-                                    <span style={{ fontSize: '0.8rem', color: '#718096', textAlign: 'left', display: 'block' }}>
+                                    <span style={{ fontSize: '0.8rem', color: '#718096', textAlign: 'left', display: 'block', marginBottom: '6px' }}>
                                       {schedule.category || '관광'}
                                     </span>
                                     
-                                    {/* 뱃지들 (아래쪽) */}
-                                    <div style={{ display: 'flex', gap: '8px', marginTop: '6px', flexWrap: 'wrap', justifyContent: 'flex-start' }}>
+                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-start' }}>
                                       {schedule.cost > 0 && (
-                                        <span style={{ background: '#fefcbf', color: '#c05621', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                        <span style={{ background: '#fefcbf', color: '#c05621', padding: '3px 6px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
                                           💰 {schedule.cost.toLocaleString()}원
                                         </span>
                                       )}
@@ -302,7 +356,7 @@ function MainPage() {
                                   </div>
 
                                   {/* 우측 콤팩트 컨트롤 버튼 */}
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginLeft: '12px', flexShrink: 0 }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginLeft: 'auto', flexShrink: 0, alignSelf: 'center' }}>
                                     <div style={{ display: 'flex', gap: '4px', background: '#f8fafc', padding: '4px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
                                       <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'up')} disabled={sIndex === 0} style={{ padding: '2px 6px', background: 'transparent', border: 'none', color: sIndex === 0 ? '#cbd5e0' : '#4a5568', cursor: sIndex === 0 ? 'default' : 'pointer', fontSize: '0.8rem' }}>▲</button>
                                       <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'down')} disabled={sIndex === day.schedules.length - 1} style={{ padding: '2px 6px', background: 'transparent', border: 'none', color: sIndex === day.schedules.length - 1 ? '#cbd5e0' : '#4a5568', cursor: sIndex === day.schedules.length - 1 ? 'default' : 'pointer', fontSize: '0.8rem' }}>▼</button>
@@ -314,7 +368,7 @@ function MainPage() {
 
                                 </div>
 
-                                {/* 다음 장소로 넘어가는 이동 수단 (마지막 장소가 아닐 경우) */}
+                                {/* 이동 수단 인터랙션 */}
                                 {sIndex < day.schedules.length - 1 && schedule.transit && schedule.transit !== '일정 종료' && (
                                   <div style={{ position: 'relative', padding: '12px 0 12px 16px', display: 'flex', alignItems: 'center', textAlign: 'left', color: '#3182ce', fontSize: '0.85rem', fontWeight: 'bold' }}>
                                     <span style={{ marginRight: '8px', fontSize: '1.1rem' }}>🚕</span> {schedule.transit}
@@ -324,16 +378,13 @@ function MainPage() {
                             )
                           })}
                           
-                          {/* 장소 추가 버튼 */}
                           <button onClick={() => addSchedule(course.id, dIndex)} style={{ 
                             width: '100%', padding: '12px', background: 'transparent', border: '2px dashed #cbd5e0', 
                             color: '#718096', borderRadius: '8px', cursor: 'pointer', marginTop: '16px', marginBottom: '8px',
-                            fontWeight: 'bold', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                            transition: 'all 0.2s', clear: 'both'
+                            fontWeight: 'bold', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s'
                           }}
                           onMouseOver={(e) => { e.target.style.background = '#f8fafc'; e.target.style.color = '#4a5568'; e.target.style.border = '2px dashed #a0aec0'; }}
-                          onMouseOut={(e) => { e.target.style.background = 'transparent'; e.target.style.color = '#718096'; e.target.style.border = '2px dashed #cbd5e0'; }}
-                          >
+                          onMouseOut={(e) => { e.target.style.background = 'transparent'; e.target.style.color = '#718096'; e.target.style.border = '2px dashed #cbd5e0'; }}>
                             + 이 날짜에 장소 추가하기
                           </button>
                         </div>
@@ -397,16 +448,12 @@ function MainPage() {
             <div className="login-modal-header" style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
               <span className="brand-icon" style={{ fontSize: '2.5rem', color: '#0056b3' }}>◎</span>
               <h2 style={{ margin: '10px 0 5px 0', color: '#1a202c' }}>Sahara 로그인</h2>
-              <p>로그인하면 추천 코스를 내 일정에 저장할 수 있습니다.</p>
             </div>
             <form className="login-form" onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <label htmlFor="email">이메일</label>
-              <input id="email" name="email" type="email" value={loginForm.email} onChange={handleLoginChange} placeholder="example@email.com" style={{ padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '1rem' }} />
-              <label htmlFor="password">비밀번호</label>
-              <input id="password" name="password" type="password" value={loginForm.password} onChange={handleLoginChange} placeholder="비밀번호 입력" style={{ padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '1rem' }} />
+              <input name="email" type="email" value={loginForm.email} onChange={handleLoginChange} placeholder="이메일 입력" style={{ padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '1rem' }} />
+              <input name="password" type="password" value={loginForm.password} onChange={handleLoginChange} placeholder="비밀번호 입력" style={{ padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '1rem' }} />
               <button type="submit" style={{ padding: '14px', background: '#0056b3', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer' }}>로그인</button>
             </form>
-            <p className="login-help">MVP 시연용 로그인입니다. 실제 회원 인증은 향후 Supabase 또는 Firebase로 확장할 수 있습니다.</p>
           </section>
         </div>
       )}
