@@ -16,19 +16,19 @@ const previewInput = {
   concept: '힐링',
 }
 
-// 🌈 일자별 테마 컬러 정의 (Day 1, Day 2 구분용)
+// 🌈 일자별 테마 컬러 정의
 const DAY_THEMES = [
-  { main: '#3182ce', bg: '#ebf8ff' }, // 1일차: 파랑
-  { main: '#38a169', bg: '#f0fff4' }, // 2일차: 초록
-  { main: '#dd6b20', bg: '#fffaf0' }, // 3일차: 주황
-  { main: '#805ad5', bg: '#faf5ff' }, // 4일차: 보라
-  { main: '#e53e3e', bg: '#fff5f5' }, // 5일차: 빨강
+  { main: '#3182ce', bg: '#ebf8ff' }, 
+  { main: '#38a169', bg: '#f0fff4' }, 
+  { main: '#dd6b20', bg: '#fffaf0' }, 
+  { main: '#805ad5', bg: '#faf5ff' }, 
+  { main: '#e53e3e', bg: '#fff5f5' }, 
 ];
 
-// 🌟 TourAPI 4.0 실시간 이미지 검색 함수
-const fetchTourApiImage = async (keyword) => {
+// 🌟 [수정됨] TourAPI에서 이미지뿐만 아니라 좌표(mapx, mapy)도 함께 가져옵니다.
+const fetchTourApiData = async (keyword) => {
   const serviceKey = import.meta.env.VITE_TOUR_API_KEY;
-  if (!serviceKey) return null; // 인증키가 없으면 백업 이미지 사용
+  if (!serviceKey) return { img: null, mapx: null, mapy: null };
 
   try {
     const baseUrl = 'https://apis.data.go.kr/B551011/KorService4/searchKeyword4';
@@ -45,10 +45,15 @@ const fetchTourApiImage = async (keyword) => {
     const response = await fetch(`${baseUrl}?${params.toString()}`);
     const data = await response.json();
     const item = data?.response?.body?.items?.item?.[0];
-    return item?.firstimage || item?.firstimage2 || null;
+    
+    return {
+      img: item?.firstimage || item?.firstimage2 || null,
+      mapx: item?.mapx || null, // 경도 (Longitude)
+      mapy: item?.mapy || null  // 위도 (Latitude)
+    };
   } catch (error) {
-    console.error(`TourAPI 이미지 로드 실패 (${keyword}):`, error);
-    return null;
+    console.error(`TourAPI 데이터 로드 실패 (${keyword}):`, error);
+    return { img: null, mapx: null, mapy: null };
   }
 };
 
@@ -70,16 +75,10 @@ function MainPage() {
   const [user, setUser] = useState(null)
   const [loginForm, setLoginForm] = useState({ email: '', password: '' })
 
-  const previewRecommendations = useMemo(() => {
-    return createRecommendations(previewInput)
-  }, [])
-
+  const previewRecommendations = useMemo(() => createRecommendations(previewInput), [])
   const visibleRecommendations = recommendations.length > 0 ? recommendations : previewRecommendations
 
-  const matchRate = useMemo(() => {
-    return calculateRecommendationMatchRate(addedCourseIds.length, visibleRecommendations.length)
-  }, [addedCourseIds.length, visibleRecommendations.length])
-
+  const matchRate = useMemo(() => calculateRecommendationMatchRate(addedCourseIds.length, visibleRecommendations.length), [addedCourseIds.length, visibleRecommendations.length])
   const matchRatePercent = Math.round(matchRate * 100)
   const savedCourses = visibleRecommendations.filter(course => addedCourseIds.includes(course.id))
 
@@ -89,13 +88,8 @@ function MainPage() {
       const newDays = [...course.days];
       const day = { ...newDays[dayIndex] };
       const newSchedules = [...day.schedules];
-
-      if (direction === 'up' && scheduleIndex > 0) {
-        [newSchedules[scheduleIndex - 1], newSchedules[scheduleIndex]] = [newSchedules[scheduleIndex], newSchedules[scheduleIndex - 1]];
-      } else if (direction === 'down' && scheduleIndex < newSchedules.length - 1) {
-        [newSchedules[scheduleIndex], newSchedules[scheduleIndex + 1]] = [newSchedules[scheduleIndex + 1], newSchedules[scheduleIndex]];
-      }
-
+      if (direction === 'up' && scheduleIndex > 0) [newSchedules[scheduleIndex - 1], newSchedules[scheduleIndex]] = [newSchedules[scheduleIndex], newSchedules[scheduleIndex - 1]];
+      else if (direction === 'down' && scheduleIndex < newSchedules.length - 1) [newSchedules[scheduleIndex], newSchedules[scheduleIndex + 1]] = [newSchedules[scheduleIndex + 1], newSchedules[scheduleIndex]];
       day.schedules = newSchedules;
       newDays[dayIndex] = day;
       return { ...course, days: newDays };
@@ -117,7 +111,7 @@ function MainPage() {
     const newPlaceName = window.prompt("추가할 장소 이름을 입력하세요:");
     if (!newPlaceName || newPlaceName.trim() === '') return;
 
-    const fetchedImg = await fetchTourApiImage(newPlaceName.trim());
+    const apiData = await fetchTourApiData(newPlaceName.trim());
 
     setRecommendations(prev => prev.map(course => {
       if (course.id !== courseId) return course;
@@ -128,7 +122,9 @@ function MainPage() {
         category: '⭐ 직접 추가', 
         transit: '', 
         cost: 0,
-        tourApiImg: fetchedImg 
+        tourApiImg: apiData.img,
+        mapx: apiData.mapx, // 가져온 좌표 저장
+        mapy: apiData.mapy  // 가져온 좌표 저장
       }];
       newDays[dayIndex] = day;
       return { ...course, days: newDays };
@@ -136,9 +132,7 @@ function MainPage() {
   };
 
   const handleGenerate = async (input) => {
-    setIsLoading(true)
-    setErrorMessage('')
-    setCurrentConcept(input.concept || '일반')
+    setIsLoading(true); setErrorMessage(''); setCurrentConcept(input.concept || '일반');
 
     try {
       const scheduleText = `${input.startDate} 부터 ${input.endDate} 까지`
@@ -147,21 +141,26 @@ function MainPage() {
       const formattedResults = await Promise.all(aiData.map(async (item, index) => {
         const safeBudget = Number(item.totalBudget) || 0; 
         
-        // 🌟 테마용 대표 컨셉 이미지 검색 (테마 첫 단어 기준)
-        const headerImage = await fetchTourApiImage(item.themeName.split(' ')[0]) || null;
+        // 테마 이미지 검색
+        const headerApiData = await fetchTourApiData(item.themeName.split(' ')[0]);
+        const headerImage = headerApiData.img || null;
 
         const daysWithImages = await Promise.all((item.itinerary || []).map(async (dayPlan) => {
           const placesWithImages = await Promise.all((dayPlan.places || []).map(async (place) => {
             const safeCost = Number(place.estimatedCost) || 0;
             const currentPlaceName = place.placeName || '장소명 없음';
-            const apiImageUrl = await fetchTourApiImage(currentPlaceName);
+            
+            // 🌟 장소별 사진 및 진짜 위치 좌표(mapx, mapy) 수집
+            const apiData = await fetchTourApiData(currentPlaceName);
 
             return { 
               place: currentPlaceName, 
               category: place.category || '관광', 
               transit: place.transitInfo || '', 
               cost: safeCost,
-              tourApiImg: apiImageUrl
+              tourApiImg: apiData.img,
+              mapx: apiData.mapx, // 지도 경도 X
+              mapy: apiData.mapy  // 지도 위도 Y
             };
           }));
 
@@ -177,7 +176,7 @@ function MainPage() {
           estimatedTime: `예상 총 경비: ${safeBudget.toLocaleString()}원`,
           theme: item.themeName || '맞춤 테마',
           description: item.themeDescription || '',
-          headerImg: headerImage, // 추가된 테마 이미지
+          headerImg: headerImage,
           days: daysWithImages
         };
       }));
@@ -185,8 +184,8 @@ function MainPage() {
       setRecommendations(formattedResults)
       setAddedCourseIds([])
     } catch (error) {
-      console.error("AI 생성 및 이미지 매칭 통합 에러:", error)
-      setErrorMessage('코스 최적화 및 이미지 큐레이션 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.')
+      console.error("AI 생성 에러:", error)
+      setErrorMessage('코스 최적화 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.')
     } finally {
       setIsLoading(false)
     }
@@ -296,13 +295,10 @@ function MainPage() {
             const isAdded = addedCourseIds.includes(course.id)
             const imageClass = ['oasis', 'food', 'activity'][index] || 'oasis'
             
-            // 🌟 컨셉에 맞는 대표 이미지 처리
             const repImage = course.headerImg || `https://picsum.photos/seed/${encodeURIComponent(course.theme)}/800/400`;
 
             return (
               <article className="recommendation-card" key={course.id} style={{ textAlign: 'left' }}>
-                
-                {/* 🌟 1. 여행 컨셉 사진 영역 */}
                 <div className={`course-image ${imageClass}`} style={{ position: 'relative', height: '220px', borderRadius: '12px 12px 0 0', overflow: 'hidden' }}>
                   <img src={repImage} alt="테마 이미지" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                   {course.influencerCourse && <span className="course-badge" style={{ position: 'absolute', top: '15px', left: '15px', background: '#e53e3e', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 'bold' }}>인플루언서 추천</span>}
@@ -315,85 +311,51 @@ function MainPage() {
 
                   <div className="day-preview" style={{ marginTop: '24px', textAlign: 'left' }}>
                     {course.days.map((day, dIndex) => {
-                      // 🌟 2. 각 날짜별 고유 컬러 테마 적용
                       const theme = DAY_THEMES[dIndex % DAY_THEMES.length];
 
                       return (
                         <div key={day.day} className="day-block" style={{ marginBottom: '32px', textAlign: 'left' }}>
-                          <h4 style={{ 
-                            fontSize: '1.3rem', color: theme.main, fontWeight: 'bold', marginBottom: '16px', 
-                            borderBottom: `2px solid ${theme.bg}`, paddingBottom: '8px', textAlign: 'left', clear: 'both' 
-                          }}>
+                          <h4 style={{ fontSize: '1.3rem', color: theme.main, fontWeight: 'bold', marginBottom: '16px', borderBottom: `2px solid ${theme.bg}`, paddingBottom: '8px', textAlign: 'left', clear: 'both' }}>
                             {day.day}
                           </h4>
                           
                           <div style={{ position: 'relative', paddingLeft: '24px', marginLeft: '12px', borderLeft: `2px solid ${theme.bg}`, textAlign: 'left', display: 'block' }}>
-                            
                             {day.schedules.map((schedule, sIndex) => {
                               const finalImageSrc = schedule.tourApiImg || `https://picsum.photos/seed/${encodeURIComponent(schedule.place)}/120/120`;
 
                               return (
                                 <div key={sIndex} style={{ display: 'block', textAlign: 'left', marginBottom: '0' }}>
-                                  <div style={{ 
-                                    position: 'relative', display: 'flex', flexDirection: 'row', alignItems: 'stretch', 
-                                    padding: '16px 0', borderBottom: '1px dashed #edf2f7', textAlign: 'left', width: '100%', boxSizing: 'border-box'
-                                  }}>
+                                  <div style={{ position: 'relative', display: 'flex', flexDirection: 'row', alignItems: 'stretch', padding: '16px 0', borderBottom: '1px dashed #edf2f7', textAlign: 'left', width: '100%', boxSizing: 'border-box' }}>
                                     
-                                    {/* 🌟 날짜별 색상이 적용된 타임라인 점 */}
-                                    <div style={{ 
-                                      position: 'absolute', left: '-31px', top: '50%', transform: 'translateY(-50%)', 
-                                      width: '12px', height: '12px', background: theme.main, borderRadius: '50%', border: '2px solid #fff', zIndex: 2 
-                                    }} />
+                                    <div style={{ position: 'absolute', left: '-31px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', background: theme.main, borderRadius: '50%', border: '2px solid #fff', zIndex: 2 }} />
                                     
-                                    {/* 🌟 3. 썸네일 이미지 및 방문 순서 뱃지 */}
                                     <div style={{ position: 'relative', marginRight: '16px', flexShrink: 0, alignSelf: 'center' }}>
-                                      <img src={finalImageSrc} alt={schedule.place} style={{ 
-                                        width: '64px', height: '64px', minWidth: '64px', objectFit: 'cover', borderRadius: '10px', display: 'block' 
-                                      }} />
-                                      <div style={{
-                                        position: 'absolute', top: '-6px', left: '-6px', width: '22px', height: '22px',
-                                        background: theme.main, color: 'white', borderRadius: '50%', border: '2px solid white',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 'bold', zIndex: 3
-                                      }}>
+                                      <img src={finalImageSrc} alt={schedule.place} style={{ width: '64px', height: '64px', minWidth: '64px', objectFit: 'cover', borderRadius: '10px', display: 'block' }} />
+                                      <div style={{ position: 'absolute', top: '-6px', left: '-6px', width: '22px', height: '22px', background: theme.main, color: 'white', borderRadius: '50%', border: '2px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 'bold', zIndex: 3 }}>
                                         {sIndex + 1}
                                       </div>
                                     </div>
 
-                                    {/* 텍스트 정보 구역 */}
                                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, textAlign: 'left', paddingRight: '10px', justifyContent: 'center' }}>
-                                      <h5 style={{ 
-                                        margin: '0 0 6px 0', fontSize: '1rem', color: '#1a202c', fontWeight: 'bold', 
-                                        textAlign: 'left', wordBreak: 'keep-all', overflowWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.4' 
-                                      }}>
+                                      <h5 style={{ margin: '0 0 6px 0', fontSize: '1rem', color: '#1a202c', fontWeight: 'bold', textAlign: 'left', wordBreak: 'keep-all', overflowWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.4' }}>
                                         {schedule.place}
                                       </h5>
-                                      <span style={{ fontSize: '0.8rem', color: '#718096', textAlign: 'left', display: 'block', marginBottom: '6px' }}>
-                                        {schedule.category || '관광'}
-                                      </span>
+                                      <span style={{ fontSize: '0.8rem', color: '#718096', textAlign: 'left', display: 'block', marginBottom: '6px' }}>{schedule.category || '관광'}</span>
                                       
                                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-start' }}>
-                                        {schedule.cost > 0 && (
-                                          <span style={{ background: '#fefcbf', color: '#c05621', padding: '3px 6px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                            💰 {schedule.cost.toLocaleString()}원
-                                          </span>
-                                        )}
+                                        {schedule.cost > 0 && <span style={{ background: '#fefcbf', color: '#c05621', padding: '3px 6px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>💰 {schedule.cost.toLocaleString()}원</span>}
                                       </div>
                                     </div>
 
-                                    {/* 우측 콤팩트 컨트롤 버튼 */}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginLeft: 'auto', flexShrink: 0, alignSelf: 'center', minWidth: '70px' }}>
                                       <div style={{ display: 'flex', gap: '4px', background: '#f8fafc', padding: '4px', borderRadius: '6px', border: '1px solid #e2e8f0', justifyContent: 'center' }}>
                                         <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'up')} disabled={sIndex === 0} style={{ padding: '2px 6px', background: 'transparent', border: 'none', color: sIndex === 0 ? '#cbd5e0' : '#4a5568', cursor: sIndex === 0 ? 'default' : 'pointer', fontSize: '0.8rem', margin: 0, float: 'none' }}>▲</button>
                                         <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'down')} disabled={sIndex === day.schedules.length - 1} style={{ padding: '2px 6px', background: 'transparent', border: 'none', color: sIndex === day.schedules.length - 1 ? '#cbd5e0' : '#4a5568', cursor: sIndex === day.schedules.length - 1 ? 'default' : 'pointer', fontSize: '0.8rem', margin: 0, float: 'none' }}>▼</button>
                                       </div>
-                                      <button onClick={() => deleteSchedule(course.id, dIndex, sIndex)} style={{ padding: '6px', background: '#fff5f5', color: '#e53e3e', border: '1px solid #fed7d7', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold', width: '100%', margin: 0, float: 'none' }}>
-                                        삭제
-                                      </button>
+                                      <button onClick={() => deleteSchedule(course.id, dIndex, sIndex)} style={{ padding: '6px', background: '#fff5f5', color: '#e53e3e', border: '1px solid #fed7d7', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold', width: '100%', margin: 0, float: 'none' }}>삭제</button>
                                     </div>
-
                                   </div>
 
-                                  {/* 이동 수단 인터랙션 */}
                                   {sIndex < day.schedules.length - 1 && schedule.transit && schedule.transit !== '일정 종료' && (
                                     <div style={{ position: 'relative', padding: '12px 0 12px 16px', display: 'flex', alignItems: 'center', textAlign: 'left', color: '#3182ce', fontSize: '0.85rem', fontWeight: 'bold', clear: 'both' }}>
                                       <span style={{ marginRight: '8px', fontSize: '1.1rem' }}>🚕</span> {schedule.transit}
@@ -418,6 +380,7 @@ function MainPage() {
                     })}
                   </div>
 
+                  {/* 🌟 수정된 CourseMap 컴포넌트에 좌표 데이터를 넘겨줍니다 */}
                   {course.days.length > 0 && <CourseMap places={course.days.flatMap(day => day.schedules)} />}
 
                   <button

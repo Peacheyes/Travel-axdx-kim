@@ -1,10 +1,10 @@
 // src/components/CourseMap.jsx
-import { useEffect, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// 마커 아이콘 깨짐 방지
+// Leaflet 기본 마커 아이콘 버그 수정용 (설치 시 필수)
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
@@ -12,62 +12,78 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// 지도 포커스 자동 맞춤 컴포넌트
+// 지도 범위(Bounds) 자동 조절 컴포넌트
 function ChangeView({ bounds }) {
   const map = useMap();
   useEffect(() => {
     if (bounds && bounds.length > 0) {
-      map.fitBounds(bounds, { padding: [30, 30] });
+      map.fitBounds(bounds, { padding: [50, 50] });
     }
   }, [bounds, map]);
   return null;
 }
 
-export default function CourseMap({ places = [] }) {
-  // 장소명 텍스트를 하나로 합쳐서 어느 지역인지 단어를 유추합니다.
-  const allPlacesText = places.map(p => p.place).join(' ');
+export default function CourseMap({ places }) {
+  const [positions, setPositions] = useState([]);
 
-  // 🚀 지역별 대략적인 중심 좌표 딕셔너리
-  const baseCoord = useMemo(() => {
-    if (allPlacesText.includes('서울') || allPlacesText.includes('홍대') || allPlacesText.includes('강남')) return { lat: 37.5665, lng: 126.9780 };
-    if (allPlacesText.includes('부산') || allPlacesText.includes('해운대') || allPlacesText.includes('광안리')) return { lat: 35.1796, lng: 129.0756 };
-    if (allPlacesText.includes('경주') || allPlacesText.includes('황리단길')) return { lat: 35.8562, lng: 129.2247 };
-    if (allPlacesText.includes('강릉') || allPlacesText.includes('속초') || allPlacesText.includes('양양')) return { lat: 37.7518, lng: 128.8760 };
-    if (allPlacesText.includes('여수') || allPlacesText.includes('순천')) return { lat: 34.7604, lng: 127.6622 };
+  useEffect(() => {
+    // 🌟 TourAPI에서 넘어온 좌표(mapx: 경도, mapy: 위도)가 존재하는 장소만 필터링
+    const validPlaces = places.filter(p => p.mapx && p.mapy && p.mapx !== "null" && p.mapy !== "null");
     
-    return { lat: 33.38, lng: 126.55 }; // 어떤 키워드도 안 걸리면 기본값은 제주도
-  }, [allPlacesText]);
+    // Leaflet은 [위도(Y), 경도(X)] 순서로 데이터를 받습니다.
+    const coords = validPlaces.map(p => ({
+      lat: parseFloat(p.mapy),
+      lng: parseFloat(p.mapx),
+      name: p.place,
+      category: p.category
+    }));
+    
+    setPositions(coords);
+  }, [places]);
 
-  // 해당 지역을 중심으로 마커를 예쁘게 흩뿌립니다.
-  const mapData = places.map((p, index) => {
-    const lat = baseCoord.lat + (Math.sin(index) * 0.05);
-    const lng = baseCoord.lng + (Math.cos(index) * 0.05);
-    return { ...p, lat, lng };
-  });
+  // 좌표가 아예 없을 경우를 대비한 가짜 지도 (기본 화면)
+  if (positions.length === 0) {
+    return (
+      <div style={{ height: '300px', width: '100%', background: '#e2e8f0', borderRadius: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '16px', color: '#718096', fontWeight: 'bold' }}>
+        🗺️ 일정을 추가하면 AI가 동선을 계산합니다.
+      </div>
+    );
+  }
 
-  const linePositions = mapData.map(p => [p.lat, p.lng]);
-
-  if (!places || places.length === 0) return null;
+  // 선을 그리기 위한 좌표 배열 추출
+  const polylinePositions = positions.map(pos => [pos.lat, pos.lng]);
+  const bounds = L.latLngBounds(polylinePositions);
 
   return (
-    <div style={{ width: '100%', height: '250px', borderRadius: '12px', overflow: 'hidden', marginTop: '15px', border: '1px solid #e2e8f0', position: 'relative', zIndex: 0 }}>
-      {/* zIndex: 0 을 주어 지도가 팝업창을 뚫지 않도록 방어합니다 */}
-      <MapContainer center={[baseCoord.lat, baseCoord.lng]} zoom={11} style={{ width: '100%', height: '100%', zIndex: 0 }} scrollWheelZoom={false}>
+    <div style={{ height: '300px', width: '100%', marginTop: '16px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+      <MapContainer 
+        center={polylinePositions[0]} 
+        zoom={11} 
+        style={{ height: '100%', width: '100%' }}
+        scrollWheelZoom={false} // 모바일 스크롤 편의를 위해 지도 자체 스크롤 줌 끄기
+      >
         <TileLayer
-          attribution='&copy; OpenStreetMap'
-          url="https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {mapData.map((place, idx) => (
-          <Marker key={idx} position={[place.lat, place.lng]}>
+        
+        {/* 장소마다 파란 핀(Marker) 꽂기 */}
+        {positions.map((pos, idx) => (
+          <Marker key={idx} position={[pos.lat, pos.lng]}>
             <Popup>
-              <strong>{place.place}</strong>
-              <br/>
-              <span style={{ fontSize: '0.8rem', color: '#718096' }}>{place.category}</span>
+              <strong>{idx + 1}. {pos.name}</strong><br />
+              {pos.category}
             </Popup>
           </Marker>
         ))}
-        {linePositions.length > 1 && <Polyline positions={linePositions} color="#0056b3" weight={3} dashArray="5, 10" />}
-        <ChangeView bounds={linePositions} />
+
+        {/* 핀과 핀 사이를 점선으로 연결 */}
+        <Polyline 
+          positions={polylinePositions} 
+          pathOptions={{ color: '#0056b3', weight: 4, dashArray: '5, 10' }} // 파란색 점선 디자인
+        />
+
+        <ChangeView bounds={polylinePositions} />
       </MapContainer>
     </div>
   );
