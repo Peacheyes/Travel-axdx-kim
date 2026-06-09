@@ -245,111 +245,100 @@ function MainPage() {
 
                   <div className="day-preview">
                     {course.days.map((day, dIndex) => (
-                      <div key={day.day} className="day-block" style={{ marginBottom: '24px' }}>
-                        <span className="day-title" style={{ display: 'block', fontSize: '1.1rem', color: '#0056b3', fontWeight: 'bold', marginBottom: '12px' }}>
-                          {day.day}
-                        </span>
+                      <div key={day.day} style={{ marginBottom: '32px' }}>
                         
-                        <div className="schedule-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {/* 날짜 제목 */}
+                        <h4 style={{ 
+                          fontSize: '1.2rem', color: '#0056b3', fontWeight: 'bold', 
+                          marginBottom: '16px', borderBottom: '2px solid #edf2f7', paddingBottom: '8px',
+                          textAlign: 'left' // 강제 좌측 정렬
+                        }}>
+                          {day.day}
+                        </h4>
+                        
+                        {/* 타임라인 컨테이너 */}
+                        <div style={{ position: 'relative', paddingLeft: '20px', borderLeft: '2px solid #e2e8f0', marginLeft: '8px' }}>
+                          
                           {day.schedules.map((schedule, sIndex) => (
-                            // 💡 완벽하게 방어된(Bulletproof) 카드 레이아웃 적용
-                            <div key={sIndex} className="schedule-item" style={{ 
-                              display: 'flex', 
-                              flexDirection: 'column', 
-                              gap: '12px', 
-                              padding: '16px', 
-                              background: 'white', 
-                              borderRadius: '12px', 
-                              border: '1px solid #e2e8f0', 
-                              boxShadow: '0 2px 4px rgba(0,0,0,0.03)',
-                              position: 'relative',
-                              zIndex: 1 // App.css 간섭 최소화
-                            }}>
+                            <div key={sIndex} style={{ position: 'relative', marginBottom: '16px' }}>
                               
-                              {/* 1층: 장소 이름 및 카테고리 (줄바꿈 허용) */}
-                              <div>
-                                <h5 style={{ 
-                                  margin: '0 0 4px 0', 
-                                  fontSize: '1.05rem', 
-                                  color: '#1a202c', 
-                                  fontWeight: 'bold', 
-                                  wordBreak: 'keep-all', 
-                                  lineHeight: '1.3' 
-                                }}>
-                                  {schedule.place}
-                                </h5>
-                                {schedule.category && (
-                                  <span style={{ fontSize: '0.85rem', color: '#718096', display: 'block' }}>
-                                    {schedule.category}
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* 2층: 뱃지 영역 (공간이 부족하면 자동으로 줄바꿈 되도록 flexWrap 적용) */}
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                {schedule.cost > 0 && (
-                                  <span style={{ 
-                                    background: '#fefcbf', // 노란색 배경
-                                    color: '#c05621',      // 주황색 글씨
-                                    padding: '4px 8px', 
-                                    borderRadius: '6px', 
-                                    fontSize: '0.8rem', 
-                                    fontWeight: 'bold',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '4px'
-                                  }}>
-                                    💰 {schedule.cost.toLocaleString()}원
-                                  </span>
-                                )}
-                                {schedule.transit && schedule.transit !== '일정 종료' && (
-                                  <span style={{ 
-                                    background: '#ebf8ff', // 파란색 배경
-                                    color: '#2b6cb0',      // 진파란색 글씨
-                                    padding: '4px 8px', 
-                                    borderRadius: '6px', 
-                                    fontSize: '0.8rem', 
-                                    fontWeight: 'bold',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '4px'
-                                  }}>
-                                    🚶‍♂️ {schedule.transit}
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* 3층: 컨트롤 버튼 영역 (항상 우측 정렬) */}
+                              {/* 타임라인 파란색 점 */}
                               <div style={{ 
-                                display: 'flex', 
-                                justifyContent: 'flex-end', 
-                                gap: '6px', 
-                                marginTop: '4px',
-                                borderTop: '1px dashed #edf2f7',
-                                paddingTop: '12px'
-                              }}>
-                                <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'up')} disabled={sIndex === 0} style={{ padding: '6px 12px', background: sIndex === 0 ? '#f7fafc' : '#edf2f7', color: sIndex === 0 ? '#cbd5e0' : '#4a5568', border: 'none', borderRadius: '6px', cursor: sIndex === 0 ? 'not-allowed' : 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                                  🔼
-                                </button>
-                                <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'down')} disabled={sIndex === day.schedules.length - 1} style={{ padding: '6px 12px', background: sIndex === day.schedules.length - 1 ? '#f7fafc' : '#edf2f7', color: sIndex === day.schedules.length - 1 ? '#cbd5e0' : '#4a5568', border: 'none', borderRadius: '6px', cursor: sIndex === day.schedules.length - 1 ? 'not-allowed' : 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                                  🔽
-                                </button>
-                                <button onClick={() => deleteSchedule(course.id, dIndex, sIndex)} style={{ padding: '6px 12px', background: '#fff5f5', color: '#e53e3e', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold', marginLeft: '4px' }}>
-                                  ❌
-                                </button>
-                              </div>
+                                position: 'absolute', left: '-27px', top: '24px', width: '12px', height: '12px', 
+                                background: '#0056b3', borderRadius: '50%', border: '2px solid white' 
+                              }} />
 
+                              {/* 💡 완벽하게 보호된 카드 영역 (App.css 간섭 100% 차단) */}
+                              <div style={{ 
+                                display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', 
+                                background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', 
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.02)', textAlign: 'left' // 내부 요소 좌측 정렬 강제
+                              }}>
+                                
+                                {/* 1. 장소 이름 & 카테고리 구역 */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <h5 style={{ 
+                                    margin: 0, padding: 0, fontSize: '1.1rem', color: '#1a202c', 
+                                    fontWeight: 'bold', wordBreak: 'keep-all', lineHeight: '1.4' 
+                                  }}>
+                                    {schedule.place}
+                                  </h5>
+                                  {schedule.category && (
+                                    <span style={{ fontSize: '0.85rem', color: '#718096', fontWeight: '500' }}>
+                                      {schedule.category}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* 2. 배지 구역 (노란색 돈, 파란색 이동수단) */}
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
+                                  {schedule.cost > 0 && (
+                                    <span style={{ 
+                                      background: '#fefcbf', color: '#c05621', padding: '4px 8px', 
+                                      borderRadius: '6px', fontSize: '0.8rem', fontWeight: 'bold' 
+                                    }}>
+                                      💰 {schedule.cost.toLocaleString()}원
+                                    </span>
+                                  )}
+                                  {schedule.transit && schedule.transit !== '일정 종료' && (
+                                    <span style={{ 
+                                      background: '#ebf8ff', color: '#2b6cb0', padding: '4px 8px', 
+                                      borderRadius: '6px', fontSize: '0.8rem', fontWeight: 'bold' 
+                                    }}>
+                                      🚶‍♂️ {schedule.transit}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* 3. 컨트롤 버튼 구역 (무조건 우측 하단 정렬) */}
+                                <div style={{ 
+                                  display: 'flex', justifyContent: 'flex-end', gap: '6px', 
+                                  marginTop: '8px', paddingTop: '12px', borderTop: '1px dashed #edf2f7' 
+                                }}>
+                                  <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'up')} disabled={sIndex === 0} style={{ padding: '6px 12px', background: sIndex === 0 ? '#f7fafc' : '#edf2f7', color: sIndex === 0 ? '#cbd5e0' : '#4a5568', border: 'none', borderRadius: '6px', cursor: sIndex === 0 ? 'not-allowed' : 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                                    🔼
+                                  </button>
+                                  <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'down')} disabled={sIndex === day.schedules.length - 1} style={{ padding: '6px 12px', background: sIndex === day.schedules.length - 1 ? '#f7fafc' : '#edf2f7', color: sIndex === day.schedules.length - 1 ? '#cbd5e0' : '#4a5568', border: 'none', borderRadius: '6px', cursor: sIndex === day.schedules.length - 1 ? 'not-allowed' : 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                                    🔽
+                                  </button>
+                                  <button onClick={() => deleteSchedule(course.id, dIndex, sIndex)} style={{ padding: '6px 12px', background: '#fff5f5', color: '#e53e3e', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold', marginLeft: '4px' }}>
+                                    ❌
+                                  </button>
+                                </div>
+
+                              </div>
                             </div>
                           ))}
                           
+                          {/* 장소 추가 버튼 */}
                           <button onClick={() => addSchedule(course.id, dIndex)} style={{ 
                             width: '100%', padding: '14px', background: '#f8fafc', border: '2px dashed #cbd5e0', 
-                            color: '#718096', borderRadius: '12px', cursor: 'pointer', marginTop: '4px', 
-                            fontWeight: 'bold', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                            transition: 'all 0.2s ease'
+                            color: '#718096', borderRadius: '12px', cursor: 'pointer', marginTop: '8px', 
+                            fontWeight: 'bold', fontSize: '0.95rem', transition: 'all 0.2s ease'
                           }}>
                             ➕ 이 날짜에 장소 추가하기
                           </button>
+
                         </div>
                       </div>
                     ))}
