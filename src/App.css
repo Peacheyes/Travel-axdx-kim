@@ -1,4 +1,39 @@
 @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css");
+/* src/index.css 또는 src/App.css 맨 위 (기존 코드 위에 추가) */
+
+/* 1. 모든 요소의 박스 사이즈 계산을 통일하여 찌그러짐 방지 */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 2. 아이폰(Safari), 안드로이드(Chrome) 등 기기별 고유 폼/버튼 스타일 강제 제거 */
+input, button, select, textarea {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  font-family: inherit;
+  outline: none;
+}
+
+/* 3. 셀렉트 박스(동반자, 여행컨셉 등) 우측 기본 화살표 제거 방지 및 디자인 통일 */
+select {
+  background-color: white;
+}
+
+/* 4. 이미지 튀어나감 방지 (반응형 100% 보장) */
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/* 5. 플렉스박스 찌그러짐(Squish) 절대 방지 */
+.hero, .search-card, .recommendation-card {
+  min-width: 0;
+}
 
 * {
   box-sizing: border-box;

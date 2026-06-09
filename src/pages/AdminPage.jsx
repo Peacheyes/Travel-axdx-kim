@@ -4,19 +4,17 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { 
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend, CartesianGrid, BarChart, Bar
+  PieChart, Pie, Cell, Legend, CartesianGrid, BarChart, Bar, LabelList
 } from 'recharts';
 
 export default function AdminPage() {
   const [savedCourses, setSavedCourses] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  // 🔐 보안 로직 상태 변수
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  // 🧭 좌측 메뉴 네비게이션 상태 관리 (현재 보고 있는 탭)
   const [activeMenu, setActiveMenu] = useState('overview');
 
   const fetchCloudData = async () => {
@@ -60,19 +58,18 @@ export default function AdminPage() {
     setPasswordInput('');
   };
 
-  // 💾 엑셀(CSV) 다운로드 기능
   const downloadCSV = () => {
     const headers = ['ID', '테마명', '컨셉', '총 예산', '저장 일시'];
     const rows = savedCourses.map(course => [
       course.id,
-      `"${course.theme}"`, // 쉼표가 있을 수 있으므로 따옴표 처리
+      `"${course.theme}"`, 
       course.concept,
       course.total_budget,
       course.created_at
     ]);
 
     const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); // 한글 깨짐 방지 BOM 추가
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); 
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
@@ -82,10 +79,10 @@ export default function AdminPage() {
     document.body.removeChild(link);
   };
 
-  // --- 데이터 가공 로직 ---
   const pieChartData = useMemo(() => {
     const counts = savedCourses.reduce((acc, cur) => {
-      acc[cur.concept] = (acc[cur.concept] || 0) + 1;
+      const concept = cur.concept ? cur.concept.trim() : '미지정';
+      acc[concept] = (acc[concept] || 0) + 1;
       return acc;
     }, {});
     return Object.keys(counts).map(key => ({ name: key, value: counts[key] })).sort((a, b) => b.value - a.value);
@@ -99,6 +96,7 @@ export default function AdminPage() {
     }).reverse();
 
     const counts = savedCourses.reduce((acc, cur) => {
+      if(!cur.created_at) return acc;
       const date = cur.created_at.split('T')[0];
       acc[date] = (acc[date] || 0) + 1;
       return acc;
@@ -110,30 +108,30 @@ export default function AdminPage() {
     }));
   }, [savedCourses]);
 
-  // 컨셉별 평균 예산 분석 (새로운 통계 기능)
   const budgetByConceptData = useMemo(() => {
     const stats = savedCourses.reduce((acc, cur) => {
-      if (!acc[cur.concept]) acc[cur.concept] = { total: 0, count: 0 };
-      acc[cur.concept].total += Number(cur.total_budget);
-      acc[cur.concept].count += 1;
+      const concept = cur.concept ? cur.concept.trim() : '미지정';
+      if (!acc[concept]) acc[concept] = { total: 0, count: 0 };
+      
+      acc[concept].total += Number(cur.total_budget || 0);
+      acc[concept].count += 1;
       return acc;
     }, {});
 
     return Object.keys(stats).map(key => ({
       name: key,
-      평균예산: Math.round(stats[key].total / stats[key].count)
+      평균예산: stats[key].count > 0 ? Math.round(stats[key].total / stats[key].count) : 0
     })).sort((a, b) => b.평균예산 - a.평균예산);
   }, [savedCourses]);
 
-  const COLORS = ['#1a73e8', '#34a853', '#fbbc04', '#ea4335', '#5f6368'];
+  const COLORS = ['#1a73e8', '#34a853', '#fbbc04', '#ea4335', '#9c27b0', '#5f6368'];
 
   const totalSaved = savedCourses.length;
   const averageBudget = totalSaved > 0 
-    ? Math.round(savedCourses.reduce((sum, item) => sum + Number(item.total_budget), 0) / totalSaved)
+    ? Math.round(savedCourses.reduce((sum, item) => sum + Number(item.total_budget || 0), 0) / totalSaved)
     : 0;
   const topConcept = pieChartData.length > 0 ? pieChartData[0].name : '-';
 
-  // 🚧 로그인 화면
   if (!isAuthenticated) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f1f3f4', fontFamily: 'Pretendard, sans-serif' }}>
@@ -158,17 +156,20 @@ export default function AdminPage() {
     );
   }
 
-  // 메뉴 리스트 정의
   const menus = [
     { id: 'overview', label: '📊 잠재고객 개요' },
     { id: 'logs', label: '👥 전체 활동 로그' },
     { id: 'stats', label: '📈 컨셉별 상세 통계' },
   ];
 
+  // 큰 숫자를 '만 원' 단위로 예쁘게 변환하는 헬퍼 함수
+  const formatKoreanCurrency = (val) => {
+    if (val >= 10000) return `₩${Math.floor(val / 10000).toLocaleString()}만`;
+    return `₩${val.toLocaleString()}`;
+  };
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f1f3f4', fontFamily: 'Roboto, Pretendard, sans-serif' }}>
-      
-      {/* 👈 좌측 사이드바 (LNB) */}
       <aside style={{ width: '240px', backgroundColor: '#ffffff', borderRight: '1px solid #dadce0', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '20px', borderBottom: '1px solid #dadce0', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <span style={{ fontSize: '1.5rem', color: '#1a73e8' }}>◎</span>
@@ -202,13 +203,10 @@ export default function AdminPage() {
         </div>
       </aside>
 
-      {/* 👉 메인 콘텐츠 영역 */}
       <main style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
-        
-        {/* 상단 컨트롤러 바 */}
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', backgroundColor: 'white', padding: '15px 24px', borderRadius: '8px', border: '1px solid #dadce0' }}>
           <h1 style={{ margin: 0, fontSize: '1.2rem', color: '#202124', fontWeight: '500' }}>
-            {menus.find(m => m.id === activeMenu)?.label.substring(3)} {/* 이모지 제거하고 타이틀 출력 */}
+            {menus.find(m => m.id === activeMenu)?.label.substring(3)}
           </h1>
           <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
             <span style={{ color: '#5f6368', fontSize: '0.9rem' }}>상태: 실시간 연동됨</span>
@@ -219,12 +217,8 @@ export default function AdminPage() {
           </div>
         </header>
 
-        {/* 뷰 라우팅 (activeMenu 상태에 따라 다른 화면을 보여줍니다) */}
-
-        {/* 탭 1. 잠재고객 개요 (기존 대시보드) */}
         {activeMenu === 'overview' && (
           <>
-            {/* 시계열 히어로 차트 */}
             <div style={{ background: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #dadce0', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
                 <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#1a73e8' }}></div>
@@ -249,7 +243,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* KPI 카드 행 */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '20px' }}>
               <div style={{ background: 'white', padding: '20px', borderRadius: '8px', border: '1px solid #dadce0' }}>
                 <div style={{ fontSize: '0.85rem', color: '#5f6368', marginBottom: '8px' }}>세션 (총 저장)</div>
@@ -269,13 +262,21 @@ export default function AdminPage() {
               </div>
             </div>
             
-            {/* 파이 차트 */}
             <div style={{ background: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #dadce0' }}>
               <h3 style={{ margin: '0 0 20px 0', fontSize: '1rem', color: '#5f6368', fontWeight: '500' }}>사용자 의도 분포 (컨셉)</h3>
-              <div style={{ height: '250px' }}>
+              <div style={{ height: '300px' }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={pieChartData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value">
+                    <Pie 
+                      data={pieChartData} 
+                      cx="50%" cy="50%" 
+                      innerRadius={50} outerRadius={80}
+                      paddingAngle={2} 
+                      dataKey="value"
+                      nameKey="name"
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      labelLine={true}
+                    >
                       {pieChartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                     </Pie>
                     <Tooltip contentStyle={{ fontSize: '12px' }} />
@@ -287,7 +288,6 @@ export default function AdminPage() {
           </>
         )}
 
-        {/* 탭 2. 전체 활동 로그 */}
         {activeMenu === 'logs' && (
           <div style={{ background: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #dadce0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -315,10 +315,10 @@ export default function AdminPage() {
                       <td style={{ padding: '12px 16px' }}>{course.theme}</td>
                       <td style={{ padding: '12px 16px' }}>
                         <span style={{ display: 'inline-block', padding: '4px 8px', borderRadius: '12px', backgroundColor: '#e8f0fe', color: '#1a73e8', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                          {course.concept}
+                          {course.concept || '미지정'}
                         </span>
                       </td>
-                      <td style={{ padding: '12px 16px', fontWeight: '500' }}>₩{Number(course.total_budget).toLocaleString()}</td>
+                      <td style={{ padding: '12px 16px', fontWeight: '500' }}>₩{Number(course.total_budget || 0).toLocaleString()}</td>
                       <td style={{ padding: '12px 16px', color: '#80868b' }}>{new Date(course.created_at).toLocaleString()}</td>
                     </tr>
                   ))}
@@ -333,21 +333,41 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* 탭 3. 컨셉별 상세 통계 */}
         {activeMenu === 'stats' && (
           <div style={{ background: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #dadce0' }}>
             <h3 style={{ margin: '0 0 20px 0', fontSize: '1rem', color: '#5f6368', fontWeight: '500' }}>컨셉별 사용자 평균 예산</h3>
             <div style={{ height: '400px', width: '100%' }}>
               <ResponsiveContainer>
-                <BarChart data={budgetByConceptData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <BarChart data={budgetByConceptData} margin={{ top: 35, right: 30, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f3f4" />
                   <XAxis dataKey="name" tick={{ fill: '#5f6368' }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={(val) => `₩${(val/10000)}만`} tick={{ fill: '#5f6368' }} axisLine={false} tickLine={false} />
+                  
+                  {/* 🌟 수정: Y축 숫자가 00000만으로 보이는 현상 해결 & 넉넉한 width 확보 */}
+                  <YAxis 
+                    width={80} 
+                    tickFormatter={formatKoreanCurrency} 
+                    tick={{ fill: '#5f6368', fontSize: 12 }} 
+                    axisLine={false} 
+                    tickLine={false} 
+                  />
+                  
                   <Tooltip 
                     formatter={(value) => `₩${value.toLocaleString()}`}
                     contentStyle={{ borderRadius: '4px', border: '1px solid #dadce0' }}
                   />
-                  <Bar dataKey="평균예산" fill="#34a853" radius={[4, 4, 0, 0]} barSize={50} />
+                  
+                  {/* 🌟 수정: minPointSize=10을 주어 값이 작아도 무조건 10px 이상 렌더링되게 설정 */}
+                  <Bar dataKey="평균예산" fill="#34a853" radius={[4, 4, 0, 0]} barSize={50} minPointSize={10}>
+                    {/* 🌟 수정: 바 위에 금액 텍스트 강제 고정 */}
+                    <LabelList 
+                      dataKey="평균예산" 
+                      position="top" 
+                      formatter={formatKoreanCurrency} 
+                      fill="#202124" 
+                      fontSize={13} 
+                      fontWeight="bold" 
+                    />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
