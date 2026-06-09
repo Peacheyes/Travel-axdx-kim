@@ -193,7 +193,6 @@ function MainPage() {
 
   const handleAddCourse = async (courseId) => {
     if (!user) { setIsLoginOpen(true); return; }
-    if (addedCourseIds.includes(courseId)) return;
 
     const selectedCourse = visibleRecommendations.find(c => c.id === courseId)
     if (!selectedCourse) return
