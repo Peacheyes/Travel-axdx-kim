@@ -209,7 +209,7 @@ function MainPage() {
     setCurrentConcept(input.concept || '일반')
 
     try {
-      const scheduleText = `${input.startDate} 부터 ${input.endDate} 까지`
+      const scheduleText = `${input.startDate} 부터 ${input.endDate} quartzite`
       const aiData = await getSaharaRecommendation(input.destination, scheduleText, input.companion, input.concept)
       
       const formattedResults = await Promise.all(aiData.map(async (item, index) => {
@@ -315,7 +315,6 @@ function MainPage() {
     event.preventDefault()
     if (!loginForm.email.trim() || !loginForm.password.trim()) return;
     const nickname = loginForm.email.split('@')[0]
-    // 데모: 기본적으로 모든 유저는 프리미엄이 아닙니다
     setUser({ email: loginForm.email, nickname, isPremium: false })
     setLoginForm({ email: '', password: '' })
     setIsLoginOpen(false)
@@ -327,7 +326,6 @@ function MainPage() {
     setSelectedDetailCourse(null)
   }
 
-  // 🌟 프리미엄 가상 결제 함수
   const handlePremiumUpgrade = () => {
     setUser(prev => ({ ...prev, isPremium: true }));
     setIsPremiumModalOpen(false);
@@ -346,7 +344,6 @@ function MainPage() {
         <div className="nav-actions">
           {user ? (
             <div className="user-menu" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              {/* 프리미엄 유저에겐 왕관 아이콘 표시 */}
               <button 
                 type="button" 
                 onClick={() => setIsMyPageOpen(true)} 
@@ -396,13 +393,15 @@ function MainPage() {
         <div><strong>{matchRatePercent}%</strong><span>추천 저장률</span></div>
       </section>
 
-      <section className="recommendation-section" id="recommendations">
+      {/* 🌟 [수정] 가로 해상도를 1400px 대형 규격으로 확장하여 여백 분산 처리 */}
+      <section className="recommendation-section" id="recommendations" style={{ maxWidth: '1400px', margin: '0 auto', padding: '60px 20px', textAlign: 'center' }}>
         <div className="section-heading">
           <h2>5초 만에 완성된 <span>3가지 맞춤 코스</span></h2>
           <p>입력하신 조건과 취향을 바탕으로 일정표, 주요 장소, 추천 이유를 비교해보세요.</p>
         </div>
 
-        <div className="recommendation-grid">
+        {/* 🌟 [수정] 그리드 정렬을 넓혀서 가로 축 공간 컴팩트화 해제 */}
+        <div className="recommendation-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '40px', width: '100%', marginTop: '40px' }}>
           {visibleRecommendations.map((course, index) => {
             const isAdded = mySavedCourses.some(c => c.id === course.id);
             const imageClass = ['oasis', 'food', 'activity'][index] || 'oasis'
@@ -410,14 +409,16 @@ function MainPage() {
             const repImage = course.headerImg || `https://picsum.photos/seed/${encodeURIComponent(course.theme)}/800/400`;
 
             return (
-              <article className="recommendation-card" key={course.id} style={{ textAlign: 'left' }}>
+              /* 🌟 [수정] 카드 자체의 border 라인을 완전히 제거하고 그림자 깊이를 최적화 */
+              <article className="recommendation-card" key={course.id} style={{ textAlign: 'left', backgroundColor: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 12px 36px rgba(0,0,0,0.06)', border: 'none', display: 'flex', flexDirection: 'column' }}>
                 
                 <div className={`course-image ${imageClass}`} style={{ position: 'relative', height: '220px', borderRadius: '12px 12px 0 0', overflow: 'hidden' }}>
                   <img src={repImage} alt="테마 이미지" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                   {course.influencerCourse && <span className="course-badge" style={{ position: 'absolute', top: '15px', left: '15px', background: '#e53e3e', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 'bold' }}>인플루언서 추천</span>}
                 </div>
 
-                <div className="course-content" style={{ padding: '24px', textAlign: 'left' }}>
+                {/* 🌟 [수정] 흰색 패딩 본체 영역을 36px 대형 규격으로 넓혀 텍스트 잘림 현상 제거 */}
+                <div className="course-content" style={{ padding: '36px 32px', textAlign: 'left', flex: 1 }}>
                   <p className="course-meta" style={{ textAlign: 'left' }}>◎ {course.estimatedTime}</p>
                   <h3 style={{ textAlign: 'left' }}>{course.theme}</h3>
                   <p style={{ textAlign: 'left' }}>{course.description}</p>
@@ -442,7 +443,6 @@ function MainPage() {
 
                               return (
                                 <div key={sIndex} style={{ display: 'block', textAlign: 'left', marginBottom: '0' }}>
-                                  {/* 광고(AD)인 경우 은은한 배경색 하이라이트 적용 */}
                                   <div style={{ 
                                     position: 'relative', display: 'flex', flexDirection: 'row', alignItems: 'stretch', 
                                     padding: '16px', borderBottom: '1px dashed #edf2f7', textAlign: 'left', width: '100%', boxSizing: 'border-box',
@@ -458,7 +458,6 @@ function MainPage() {
                                       <img src={finalImageSrc} alt={schedule.place} style={{ 
                                         width: '64px', height: '64px', minWidth: '64px', objectFit: 'cover', borderRadius: '10px', display: 'block' 
                                       }} />
-                                      {/* 순서 뱃지 (광고는 번호 대신 별 모양 등으로 처리하거나 번호 유지) */}
                                       <div style={{
                                         position: 'absolute', top: '-6px', left: '-6px', width: '22px', height: '22px',
                                         background: theme.main, color: 'white', borderRadius: '50%', border: '2px solid white',
@@ -467,7 +466,6 @@ function MainPage() {
                                         {schedule.isAd ? '⭐' : sIndex + 1}
                                       </div>
                                       
-                                      {/* 🌟 BM: 광고 태그를 사진 바로 밑에 아주 작게 추가 */}
                                       {schedule.isAd && (
                                         <div style={{ marginTop: '4px', fontSize: '0.65rem', color: '#a0aec0', fontWeight: 'bold', letterSpacing: '1px' }}>AD</div>
                                       )}
@@ -551,7 +549,7 @@ function MainPage() {
         </div>
       </section>
 
-      {/* 🌟 1. 보관함(마이페이지) 모달창 */}
+      {/* 보관함 창 모달 */}
       {isMyPageOpen && user && (
         <div className="mypage-modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <section className="mypage-modal" style={{ background: '#f8f9fa', padding: '2rem', borderRadius: '16px', width: '90%', maxWidth: '800px', maxHeight: '85vh', overflowY: 'auto', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
@@ -609,7 +607,7 @@ function MainPage() {
         </div>
       )}
 
-      {/* 🌟 2. 보관함 상세 보기 읽기 전용 모달창 */}
+      {/* 보관함 상세 모달 */}
       {selectedDetailCourse && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.8)', zIndex: 10001, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', boxSizing: 'border-box' }}>
           <div style={{ background: 'white', borderRadius: '16px', width: '100%', maxWidth: '700px', maxHeight: '90vh', overflowY: 'auto', position: 'relative', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)' }}>
@@ -676,7 +674,7 @@ function MainPage() {
         </div>
       )}
 
-      {/* 🌟 3. 프리미엄 결제 유도 모달창 (BM 적용) */}
+      {/* 프리미엄 유도 모달 */}
       {isPremiumModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.75)', zIndex: 10002, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ background: 'white', padding: '40px 30px', borderRadius: '20px', width: '90%', maxWidth: '450px', textAlign: 'center', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
