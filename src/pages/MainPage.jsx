@@ -47,7 +47,6 @@ function MainPage() {
   const matchRatePercent = Math.round(matchRate * 100)
   const savedCourses = visibleRecommendations.filter(course => addedCourseIds.includes(course.id))
 
-  // --- 🛠️ 1. 일정 편집 (이동/삭제/추가) 로직 (기존 디자인 유지하며 추가됨) ---
   const moveSchedule = (courseId, dayIndex, scheduleIndex, direction) => {
     setRecommendations(prev => prev.map(course => {
       if (course.id !== courseId) return course;
@@ -92,7 +91,6 @@ function MainPage() {
     }));
   };
 
-  // --- 🤖 AI 통신 로직 ---
   const handleGenerate = async (input) => {
     setIsLoading(true)
     setErrorMessage('')
@@ -123,14 +121,13 @@ function MainPage() {
       setRecommendations(formattedResults)
       setAddedCourseIds([])
     } catch (error) {
-      console.error("AI 생성 에러 상세 로그:", error)
-      setErrorMessage('코스 최적화 중 문제가 발생했습니다. 다시 시도해주세요.')
+      console.error("AI 생성 에러:", error)
+      setErrorMessage('코스 최적화 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.')
     } finally {
       setIsLoading(false)
     }
   }
 
-  // --- 💾 코스 저장 및 로그인 로직 ---
   const handleAddCourse = async (courseId) => {
     if (!user) { setIsLoginOpen(true); return; }
     if (addedCourseIds.includes(courseId)) return;
@@ -161,7 +158,6 @@ function MainPage() {
   const handleLoginSubmit = (event) => {
     event.preventDefault()
     if (!loginForm.email.trim() || !loginForm.password.trim()) return;
-
     const nickname = loginForm.email.split('@')[0]
     setUser({ email: loginForm.email, nickname })
     setLoginForm({ email: '', password: '' })
@@ -176,23 +172,15 @@ function MainPage() {
   return (
     <main className="app">
       <header className="nav">
-        <div className="brand">
-          <span className="brand-icon">◎</span>
-          <strong>Sahara</strong>
-        </div>
-
+        <div className="brand"><span className="brand-icon">◎</span><strong>Sahara</strong></div>
         <nav className="nav-menu" aria-label="주요 메뉴">
           <a href="#travel-input">AI 코스추천</a>
           <a href="#recommendations">인플루언서 코스</a>
           <a href="#recommendations">세미패키지</a>
         </nav>
-
         <div className="nav-actions">
           {user ? (
-            <div className="user-menu">
-              <span>{user.nickname}님</span>
-              <button type="button" onClick={handleLogout}>로그아웃</button>
-            </div>
+            <div className="user-menu"><span>{user.nickname}님</span><button type="button" onClick={handleLogout}>로그아웃</button></div>
           ) : (
             <button type="button" className="login-button" onClick={() => setIsLoginOpen(true)}>로그인</button>
           )}
@@ -200,7 +188,6 @@ function MainPage() {
         </div>
       </header>
 
-      {/* 🚀 복구 완료: 회원님이 만드신 화려한 애니메이션 히어로 섹션 */}
       <section className="hero">
         <div className="hero-content">
           <p className="hero-badge">AI 기반 초개인화 큐레이션</p>
@@ -213,35 +200,12 @@ function MainPage() {
         </div>
 
         <div className="hero-visual" aria-label="AI 추천 동선 미리보기">
-          <div className="floating-card small">
-            <span className="pin-dot">◎</span>
-            <div>
-              <strong>숨겨진 오아시스 스팟</strong>
-              <p>당신의 취향 98% 일치</p>
-            </div>
-          </div>
-
+          <div className="floating-card small"><span className="pin-dot">◎</span><div><strong>숨겨진 오아시스 스팟</strong><p>당신의 취향 98% 일치</p></div></div>
           <div className="route-preview-card">
-            <div className="route-card-header">
-              <span className="route-icon">⌘</span>
-              <div>
-                <strong>최적화된 동선</strong>
-                <p>AI가 분석한 효율적인 루트</p>
-              </div>
-              <em>-45분 절약</em>
-            </div>
-
-            <div className="route-map">
-              <span className="marker one" /><i /><span className="marker two" /><i /><span className="marker three" />
-            </div>
-
-            <div className="route-list">
-              <p><b>1</b> 오아시스 힐링 코스</p>
-              <p><b>2</b> 로컬 미식 코스</p>
-              <p><b>3</b> 액티비티 탐험 코스</p>
-            </div>
+            <div className="route-card-header"><span className="route-icon">⌘</span><div><strong>최적화된 동선</strong><p>AI가 분석한 효율적인 루트</p></div><em>-45분 절약</em></div>
+            <div className="route-map"><span className="marker one" /><i /><span className="marker two" /><i /><span className="marker three" /></div>
+            <div className="route-list"><p><b>1</b> 오아시스 힐링 코스</p><p><b>2</b> 로컬 미식 코스</p><p><b>3</b> 액티비티 탐험 코스</p></div>
           </div>
-
           <div className="floating-card status"><span />실시간 큐레이션 중...</div>
         </div>
       </section>
@@ -251,20 +215,10 @@ function MainPage() {
         {errorMessage && <p className="form-errors" role="alert">{errorMessage}</p>}
       </section>
 
-      {/* 🚀 복구 완료: 회원님이 만드신 통계 요약 섹션 */}
       <section className="summary-row" aria-label="추천 요약">
-        <div>
-          <strong>{recommendations.length || 3}개</strong>
-          <span>추천 코스</span>
-        </div>
-        <div>
-          <strong>{addedCourseIds.length}개</strong>
-          <span>내 일정 추가</span>
-        </div>
-        <div>
-          <strong>{matchRatePercent}%</strong>
-          <span>추천 저장률</span>
-        </div>
+        <div><strong>{recommendations.length || 3}개</strong><span>추천 코스</span></div>
+        <div><strong>{addedCourseIds.length}개</strong><span>내 일정 추가</span></div>
+        <div><strong>{matchRatePercent}%</strong><span>추천 저장률</span></div>
       </section>
 
       <section className="recommendation-section" id="recommendations">
@@ -291,52 +245,108 @@ function MainPage() {
 
                   <div className="day-preview">
                     {course.days.map((day, dIndex) => (
-                      <div key={day.day} className="day-block">
-                        <span className="day-title">{day.day}</span>
+                      <div key={day.day} className="day-block" style={{ marginBottom: '24px' }}>
+                        <span className="day-title" style={{ display: 'block', fontSize: '1.1rem', color: '#0056b3', fontWeight: 'bold', marginBottom: '12px' }}>
+                          {day.day}
+                        </span>
                         
-                        <div className="schedule-list">
+                        <div className="schedule-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                           {day.schedules.map((schedule, sIndex) => (
-                            // 💡 UI 레이아웃 픽스 + 편집 버튼(🔼🔽❌) 결합 영역
+                            // 💡 완벽하게 방어된(Bulletproof) 카드 레이아웃 적용
                             <div key={sIndex} className="schedule-item" style={{ 
-                              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px',
-                              padding: '12px 14px', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', 
-                              marginBottom: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' 
+                              display: 'flex', 
+                              flexDirection: 'column', 
+                              gap: '12px', 
+                              padding: '16px', 
+                              background: 'white', 
+                              borderRadius: '12px', 
+                              border: '1px solid #e2e8f0', 
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.03)',
+                              position: 'relative',
+                              zIndex: 1 // App.css 간섭 최소화
                             }}>
                               
-                              {/* 좌측: 장소 정보 영역 (글씨가 자연스럽게 줄바꿈 되도록 처리) */}
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <p className="schedule-place" style={{ 
-                                  margin: '0 0 6px 0', fontWeight: '600', color: '#1a202c', fontSize: '0.95rem',
-                                  wordBreak: 'keep-all', lineHeight: '1.4' // 감성... 하고 잘리지 않고 자연스럽게 두 줄로 내려갑니다.
+                              {/* 1층: 장소 이름 및 카테고리 (줄바꿈 허용) */}
+                              <div>
+                                <h5 style={{ 
+                                  margin: '0 0 4px 0', 
+                                  fontSize: '1.05rem', 
+                                  color: '#1a202c', 
+                                  fontWeight: 'bold', 
+                                  wordBreak: 'keep-all', 
+                                  lineHeight: '1.3' 
                                 }}>
                                   {schedule.place}
-                                  {schedule.category && (
-                                    <span className="schedule-category" style={{ fontSize: '0.8rem', color: '#718096', marginLeft: '6px', fontWeight: 'normal', display: 'inline-block' }}>
-                                      {schedule.category}
-                                    </span>
-                                  )}
-                                </p>
-                                
-                                <div className="schedule-tags" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                                  {schedule.cost > 0 && <span className="tag cost">💰 {schedule.cost.toLocaleString()}원</span>}
-                                  {schedule.transit && schedule.transit !== '일정 종료' && <span className="tag transit">🚶‍♂️ {schedule.transit}</span>}
-                                </div>
+                                </h5>
+                                {schedule.category && (
+                                  <span style={{ fontSize: '0.85rem', color: '#718096', display: 'block' }}>
+                                    {schedule.category}
+                                  </span>
+                                )}
                               </div>
 
-                              {/* 우측: 편집 버튼 (절대 찌그러지지 않도록 flexShrink: 0 처리) */}
-                              <div className="schedule-controls" style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                                <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'up')} disabled={sIndex === 0} style={{ padding: '6px 8px', background: sIndex === 0 ? '#f7fafc' : '#edf2f7', color: sIndex === 0 ? '#cbd5e0' : '#4a5568', border: 'none', borderRadius: '4px', cursor: sIndex === 0 ? 'not-allowed' : 'pointer', fontSize: '0.8rem' }}>🔼</button>
-                                <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'down')} disabled={sIndex === day.schedules.length - 1} style={{ padding: '6px 8px', background: sIndex === day.schedules.length - 1 ? '#f7fafc' : '#edf2f7', color: sIndex === day.schedules.length - 1 ? '#cbd5e0' : '#4a5568', border: 'none', borderRadius: '4px', cursor: sIndex === day.schedules.length - 1 ? 'not-allowed' : 'pointer', fontSize: '0.8rem' }}>🔽</button>
-                                <button onClick={() => deleteSchedule(course.id, dIndex, sIndex)} style={{ padding: '6px 8px', background: '#fff5f5', color: '#e53e3e', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', marginLeft: '2px' }}>❌</button>
+                              {/* 2층: 뱃지 영역 (공간이 부족하면 자동으로 줄바꿈 되도록 flexWrap 적용) */}
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                {schedule.cost > 0 && (
+                                  <span style={{ 
+                                    background: '#fefcbf', // 노란색 배경
+                                    color: '#c05621',      // 주황색 글씨
+                                    padding: '4px 8px', 
+                                    borderRadius: '6px', 
+                                    fontSize: '0.8rem', 
+                                    fontWeight: 'bold',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}>
+                                    💰 {schedule.cost.toLocaleString()}원
+                                  </span>
+                                )}
+                                {schedule.transit && schedule.transit !== '일정 종료' && (
+                                  <span style={{ 
+                                    background: '#ebf8ff', // 파란색 배경
+                                    color: '#2b6cb0',      // 진파란색 글씨
+                                    padding: '4px 8px', 
+                                    borderRadius: '6px', 
+                                    fontSize: '0.8rem', 
+                                    fontWeight: 'bold',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}>
+                                    🚶‍♂️ {schedule.transit}
+                                  </span>
+                                )}
                               </div>
+
+                              {/* 3층: 컨트롤 버튼 영역 (항상 우측 정렬) */}
+                              <div style={{ 
+                                display: 'flex', 
+                                justifyContent: 'flex-end', 
+                                gap: '6px', 
+                                marginTop: '4px',
+                                borderTop: '1px dashed #edf2f7',
+                                paddingTop: '12px'
+                              }}>
+                                <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'up')} disabled={sIndex === 0} style={{ padding: '6px 12px', background: sIndex === 0 ? '#f7fafc' : '#edf2f7', color: sIndex === 0 ? '#cbd5e0' : '#4a5568', border: 'none', borderRadius: '6px', cursor: sIndex === 0 ? 'not-allowed' : 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                                  🔼
+                                </button>
+                                <button onClick={() => moveSchedule(course.id, dIndex, sIndex, 'down')} disabled={sIndex === day.schedules.length - 1} style={{ padding: '6px 12px', background: sIndex === day.schedules.length - 1 ? '#f7fafc' : '#edf2f7', color: sIndex === day.schedules.length - 1 ? '#cbd5e0' : '#4a5568', border: 'none', borderRadius: '6px', cursor: sIndex === day.schedules.length - 1 ? 'not-allowed' : 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                                  🔽
+                                </button>
+                                <button onClick={() => deleteSchedule(course.id, dIndex, sIndex)} style={{ padding: '6px 12px', background: '#fff5f5', color: '#e53e3e', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold', marginLeft: '4px' }}>
+                                  ❌
+                                </button>
+                              </div>
+
                             </div>
                           ))}
                           
-                          {/* 장소 추가 버튼 */}
                           <button onClick={() => addSchedule(course.id, dIndex)} style={{ 
-                            width: '100%', padding: '10px', background: '#f8fafc', border: '1px dashed #cbd5e0', 
-                            color: '#718096', borderRadius: '6px', cursor: 'pointer', marginTop: '4px', 
-                            fontWeight: '600', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' 
+                            width: '100%', padding: '14px', background: '#f8fafc', border: '2px dashed #cbd5e0', 
+                            color: '#718096', borderRadius: '12px', cursor: 'pointer', marginTop: '4px', 
+                            fontWeight: 'bold', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                            transition: 'all 0.2s ease'
                           }}>
                             ➕ 이 날짜에 장소 추가하기
                           </button>
@@ -352,7 +362,7 @@ function MainPage() {
                     onClick={() => handleAddCourse(course.id)}
                     disabled={isAdded}
                     className={`save-btn ${isAdded ? 'added' : ''}`}
-                    style={{ width: '100%', padding: '12px', borderRadius: '8px', fontWeight: 'bold', cursor: isAdded ? 'default' : 'pointer', backgroundColor: isAdded ? '#e2e8f0' : '#0056b3', color: isAdded ? '#a0aec0' : '#ffffff', border: 'none', marginTop: '1rem', transition: 'all 0.2s ease' }}
+                    style={{ width: '100%', padding: '14px', borderRadius: '8px', fontWeight: 'bold', cursor: isAdded ? 'default' : 'pointer', backgroundColor: isAdded ? '#e2e8f0' : '#0056b3', color: isAdded ? '#a0aec0' : '#ffffff', border: 'none', marginTop: '1rem', transition: 'all 0.2s ease', fontSize: '1rem' }}
                   >
                     {isAdded ? '✅ 내 일정에 추가됨' : '🤍 내 일정에 저장하기'}
                   </button>
@@ -363,7 +373,6 @@ function MainPage() {
         </div>
       </section>
 
-      {/* 🚀 복구 완료: 회원님이 만드신 내 일정 보관함 (장바구니) */}
       {savedCourses.length > 0 && (
         <section className="saved-courses-section" id="my-schedule" style={{ maxWidth: '1200px', margin: '3rem auto', padding: '2rem', backgroundColor: '#f8f9fa', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
           <div style={{ marginBottom: '1.5rem' }}>
@@ -395,22 +404,21 @@ function MainPage() {
         </section>
       )}
 
-      {/* 🚀 복구 완료: 회원님이 만드신 로그인 모달 */}
       {isLoginOpen && (
-        <div className="login-modal-backdrop">
-          <section className="login-modal" aria-label="로그인 창">
-            <button type="button" className="modal-close" onClick={() => setIsLoginOpen(false)}>×</button>
-            <div className="login-modal-header">
-              <span className="brand-icon">◎</span>
-              <h2>Sahara 로그인</h2>
+        <div className="login-modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.7)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <section className="login-modal" aria-label="로그인 창" style={{ background: 'white', padding: '2rem', borderRadius: '12px', width: '90%', maxWidth: '400px', position: 'relative', zIndex: 10000, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)' }}>
+            <button type="button" onClick={() => setIsLoginOpen(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#a0aec0' }}>×</button>
+            <div className="login-modal-header" style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
+              <span className="brand-icon" style={{ fontSize: '2.5rem', color: '#0056b3' }}>◎</span>
+              <h2 style={{ margin: '10px 0 5px 0', color: '#1a202c' }}>Sahara 로그인</h2>
               <p>로그인하면 추천 코스를 내 일정에 저장할 수 있습니다.</p>
             </div>
-            <form className="login-form" onSubmit={handleLoginSubmit}>
+            <form className="login-form" onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <label htmlFor="email">이메일</label>
-              <input id="email" name="email" type="email" value={loginForm.email} onChange={handleLoginChange} placeholder="example@email.com" />
+              <input id="email" name="email" type="email" value={loginForm.email} onChange={handleLoginChange} placeholder="example@email.com" style={{ padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '1rem' }} />
               <label htmlFor="password">비밀번호</label>
-              <input id="password" name="password" type="password" value={loginForm.password} onChange={handleLoginChange} placeholder="비밀번호 입력" />
-              <button type="submit">로그인</button>
+              <input id="password" name="password" type="password" value={loginForm.password} onChange={handleLoginChange} placeholder="비밀번호 입력" style={{ padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '1rem' }} />
+              <button type="submit" style={{ padding: '14px', background: '#0056b3', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer' }}>로그인</button>
             </form>
             <p className="login-help">MVP 시연용 로그인입니다. 실제 회원 인증은 향후 Supabase 또는 Firebase로 확장할 수 있습니다.</p>
           </section>
