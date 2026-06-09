@@ -17,6 +17,15 @@ export default function AdminPage() {
 
   const [activeMenu, setActiveMenu] = useState('overview');
 
+  // 🌟 [추가] 커스텀 모달 상태 관리 (alert, confirm 대체)
+  const [modalConfig, setModalConfig] = useState({
+    isOpen: false,
+    type: 'confirm', // 'confirm' | 'alert'
+    title: '',
+    message: '',
+    targetId: null,
+  });
+
   const fetchCloudData = async () => {
     setIsLoading(true);
     try {
@@ -58,25 +67,47 @@ export default function AdminPage() {
     setPasswordInput('');
   };
 
-  // 🌟 [추가] 실제 Supabase 데이터베이스에서 레코드를 삭제하는 함수
-  const handleDeleteCourse = async (id) => {
-    const isConfirm = window.confirm('정말로 이 데이터를 삭제하시겠습니까?\n(실제 데이터베이스에서도 영구 삭제됩니다)');
-    if (!isConfirm) return;
+  // 🌟 1. 삭제 버튼 클릭 시 "커스텀 확인 모달"을 띄움
+  const triggerDeleteCourse = (id) => {
+    setModalConfig({
+      isOpen: true,
+      type: 'confirm',
+      title: '데이터 삭제 확인',
+      message: '정말로 이 데이터를 삭제하시겠습니까?\n(실제 데이터베이스에서도 영구 삭제됩니다)',
+      targetId: id,
+    });
+  };
 
+  // 🌟 2. 모달에서 [삭제하기]를 눌렀을 때 실행되는 실제 삭제 로직
+  const executeDelete = async () => {
+    const id = modalConfig.targetId;
     try {
       const { error } = await supabase
         .from('saved_courses')
         .delete()
-        .eq('id', id); // 고유 ID를 기준으로 삭제
+        .eq('id', id);
 
       if (error) throw error;
 
-      // DB 삭제 성공 시, 화면(상태)에서도 해당 항목 즉시 제거
       setSavedCourses(prev => prev.filter(course => course.id !== id));
-      alert('성공적으로 삭제되었습니다. 🗑️');
+      
+      // 삭제 성공 시 "커스텀 완료 알림 모달"로 전환
+      setModalConfig({
+        isOpen: true,
+        type: 'alert',
+        title: '삭제 완료',
+        message: '성공적으로 삭제되었습니다. 🗑️',
+        targetId: null,
+      });
     } catch (error) {
       console.error('삭제 실패:', error);
-      alert('데이터 삭제 중 오류가 발생했습니다.');
+      setModalConfig({
+        isOpen: true,
+        type: 'alert',
+        title: '오류 발생',
+        message: '데이터 삭제 중 오류가 발생했습니다.',
+        targetId: null,
+      });
     }
   };
 
@@ -190,7 +221,46 @@ export default function AdminPage() {
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f1f3f4', fontFamily: 'Roboto, Pretendard, sans-serif' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f1f3f4', fontFamily: 'Roboto, Pretendard, sans-serif', position: 'relative' }}>
+      
+      {/* 🌟 3. 커스텀 시스템 UI 모달창 렌더링 */}
+      {modalConfig.isOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.5)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ background: 'white', padding: '30px', borderRadius: '16px', width: '90%', maxWidth: '400px', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '15px' }}>
+              {modalConfig.type === 'confirm' ? '⚠️' : '✅'}
+            </div>
+            <h3 style={{ margin: '0 0 10px 0', color: '#202124', fontSize: '1.4rem' }}>{modalConfig.title}</h3>
+            <p style={{ color: '#5f6368', fontSize: '1rem', lineHeight: '1.5', marginBottom: '25px', whiteSpace: 'pre-wrap' }}>
+              {modalConfig.message}
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              {modalConfig.type === 'confirm' && (
+                <button 
+                  onClick={() => setModalConfig({ ...modalConfig, isOpen: false })} 
+                  style={{ flex: 1, padding: '12px', borderRadius: '8px', border: 'none', background: '#f1f3f4', color: '#5f6368', fontWeight: 'bold', cursor: 'pointer', transition: 'background 0.2s' }}
+                  onMouseOver={(e) => e.target.style.background = '#e8eaed'}
+                  onMouseOut={(e) => e.target.style.background = '#f1f3f4'}
+                >
+                  취소
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (modalConfig.type === 'confirm') executeDelete();
+                  else setModalConfig({ ...modalConfig, isOpen: false });
+                }}
+                style={{ flex: 1, padding: '12px', borderRadius: '8px', border: 'none', background: modalConfig.type === 'confirm' ? '#ea4335' : '#1a73e8', color: 'white', fontWeight: 'bold', cursor: 'pointer', transition: 'opacity 0.2s' }}
+                onMouseOver={(e) => e.target.style.opacity = '0.9'}
+                onMouseOut={(e) => e.target.style.opacity = '1'}
+              >
+                {modalConfig.type === 'confirm' ? '삭제하기' : '확인'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <aside style={{ width: '240px', backgroundColor: '#ffffff', borderRight: '1px solid #dadce0', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '20px', borderBottom: '1px solid #dadce0', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <span style={{ fontSize: '1.5rem', color: '#1a73e8' }}>◎</span>
@@ -309,7 +379,6 @@ export default function AdminPage() {
           </>
         )}
 
-        {/* 🌟 탭 2. 전체 활동 로그 (삭제 기능 추가) */}
         {activeMenu === 'logs' && (
           <div style={{ background: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #dadce0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -328,7 +397,7 @@ export default function AdminPage() {
                     <th style={{ padding: '12px 16px', fontWeight: 'bold' }}>컨셉</th>
                     <th style={{ padding: '12px 16px', fontWeight: 'bold' }}>예산</th>
                     <th style={{ padding: '12px 16px', fontWeight: 'bold' }}>생성 일시</th>
-                    <th style={{ padding: '12px 16px', fontWeight: 'bold', textAlign: 'center' }}>관리</th> {/* 🌟 삭제 열 추가 */}
+                    <th style={{ padding: '12px 16px', fontWeight: 'bold', textAlign: 'center' }}>관리</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -343,21 +412,13 @@ export default function AdminPage() {
                       </td>
                       <td style={{ padding: '12px 16px', fontWeight: '500' }}>₩{Number(course.total_budget || 0).toLocaleString()}</td>
                       <td style={{ padding: '12px 16px', color: '#80868b' }}>{new Date(course.created_at).toLocaleString()}</td>
-                      
-                      {/* 🌟 삭제 버튼 구현 */}
                       <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                        {/* 🌟 기존 window.confirm을 triggerDeleteCourse로 교체 */}
                         <button 
-                          onClick={() => handleDeleteCourse(course.id)}
+                          onClick={() => triggerDeleteCourse(course.id)}
                           style={{ 
-                            padding: '4px 10px', 
-                            backgroundColor: '#fff0f0', 
-                            color: '#ea4335', 
-                            border: '1px solid #fce8e6', 
-                            borderRadius: '4px', 
-                            cursor: 'pointer', 
-                            fontSize: '0.8rem', 
-                            fontWeight: 'bold',
-                            transition: 'all 0.2s'
+                            padding: '4px 10px', backgroundColor: '#fff0f0', color: '#ea4335', border: '1px solid #fce8e6', 
+                            borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold', transition: 'all 0.2s'
                           }}
                           onMouseOver={(e) => e.target.style.backgroundColor = '#fce8e6'}
                           onMouseOut={(e) => e.target.style.backgroundColor = '#fff0f0'}
@@ -386,26 +447,10 @@ export default function AdminPage() {
                 <BarChart data={budgetByConceptData} margin={{ top: 35, right: 30, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f3f4" />
                   <XAxis dataKey="name" tick={{ fill: '#5f6368' }} axisLine={false} tickLine={false} />
-                  <YAxis 
-                    width={80} 
-                    tickFormatter={formatKoreanCurrency} 
-                    tick={{ fill: '#5f6368', fontSize: 12 }} 
-                    axisLine={false} 
-                    tickLine={false} 
-                  />
-                  <Tooltip 
-                    formatter={(value) => `₩${value.toLocaleString()}`}
-                    contentStyle={{ borderRadius: '4px', border: '1px solid #dadce0' }}
-                  />
+                  <YAxis width={80} tickFormatter={formatKoreanCurrency} tick={{ fill: '#5f6368', fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <Tooltip formatter={(value) => `₩${value.toLocaleString()}`} contentStyle={{ borderRadius: '4px', border: '1px solid #dadce0' }} />
                   <Bar dataKey="평균예산" fill="#34a853" radius={[4, 4, 0, 0]} barSize={50} minPointSize={10}>
-                    <LabelList 
-                      dataKey="평균예산" 
-                      position="top" 
-                      formatter={formatKoreanCurrency} 
-                      fill="#202124" 
-                      fontSize={13} 
-                      fontWeight="bold" 
-                    />
+                    <LabelList dataKey="평균예산" position="top" formatter={formatKoreanCurrency} fill="#202124" fontSize={13} fontWeight="bold" />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>

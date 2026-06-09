@@ -82,7 +82,6 @@ const DAY_THEMES = [
   { main: '#e53e3e', bg: '#fff5f5' }, 
 ];
 
-// 🌟 비즈니스 모델 무료 등급 제한 상수
 const FREE_MAX_GENERATE = 2;
 const FREE_MAX_SAVE = 3;
 
@@ -109,18 +108,23 @@ const fetchTourApiImage = async (keyword) => {
 function MainPage() {
   const [recommendations, setRecommendations] = useState(INFLUENCER_COURSES)
   const [mySavedCourses, setMySavedCourses] = useState([])
-  
-  // 🌟 유저 정보 확장 (isPremium 플래그 추가)
   const [user, setUser] = useState(null)
-  
-  // 🌟 코스 생성 횟수 추적
   const [generationCount, setGenerationCount] = useState(0)
+
+  // 🌟 [추가] 시스템 알림창(Modal) 공통 상태
+  const [sysModal, setSysModal] = useState({
+    isOpen: false,
+    type: 'alert', // 'alert' | 'prompt'
+    title: '',
+    message: '',
+    onConfirm: null,
+  })
+  const [promptInput, setPromptInput] = useState('')
 
   useEffect(() => {
     if (user) {
       const savedData = localStorage.getItem(`sahara_saved_${user.email}`)
       setMySavedCourses(savedData ? JSON.parse(savedData) : [])
-      
       const genCount = localStorage.getItem(`sahara_genCount_${user.email}`)
       setGenerationCount(genCount ? Number(genCount) : 0)
     } else {
@@ -135,10 +139,10 @@ function MainPage() {
   const [isLoginOpen, setIsLoginOpen] = useState(false)
   
   const [isMyPageOpen, setIsMyPageOpen] = useState(false)
-  // 🌟 프리미엄 유도 모달 상태
   const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false)
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
+  
   const [selectedDetailCourse, setSelectedDetailCourse] = useState(null)
-
   const [loginForm, setLoginForm] = useState({ email: '', password: '' })
 
   const visibleRecommendations = recommendations
@@ -148,6 +152,16 @@ function MainPage() {
   }, [mySavedCourses.length, visibleRecommendations.length])
 
   const matchRatePercent = Math.round(matchRate * 100)
+
+  // 🌟 [추가] 공통 커스텀 모달 호출 헬퍼 함수
+  const showAlert = (title, message, onConfirm = null) => {
+    setSysModal({ isOpen: true, type: 'alert', title, message, onConfirm });
+  };
+
+  const showPrompt = (title, message, onConfirm) => {
+    setPromptInput('');
+    setSysModal({ isOpen: true, type: 'prompt', title, message, onConfirm });
+  };
 
   const restoreInfluencerCourses = () => {
     setRecommendations(INFLUENCER_COURSES);
@@ -175,30 +189,31 @@ function MainPage() {
     }));
   };
 
-  const addSchedule = async (courseId, dayIndex) => {
-    const newPlaceName = window.prompt("추가할 장소 이름을 입력하세요:");
-    if (!newPlaceName || newPlaceName.trim() === '') return;
+  // 🌟 [수정] window.prompt 대신 커스텀 프롬프트 모달 사용
+  const addSchedule = (courseId, dayIndex) => {
+    showPrompt('장소 추가', '추가할 장소 이름을 입력하세요:', async (newPlaceName) => {
+      if (!newPlaceName || newPlaceName.trim() === '') return;
 
-    const fetchedImg = await fetchTourApiImage(newPlaceName.trim());
+      const fetchedImg = await fetchTourApiImage(newPlaceName.trim());
 
-    setRecommendations(prev => prev.map(course => {
-      if (course.id !== courseId) return course;
-      const newDays = [...course.days];
-      const day = { ...newDays[dayIndex] };
-      day.schedules = [...day.schedules, { place: newPlaceName, category: '⭐ 직접 추가', transit: '', cost: 0, tourApiImg: fetchedImg }];
-      newDays[dayIndex] = day; return { ...course, days: newDays };
-    }));
+      setRecommendations(prev => prev.map(course => {
+        if (course.id !== courseId) return course;
+        const newDays = [...course.days];
+        const day = { ...newDays[dayIndex] };
+        day.schedules = [...day.schedules, { place: newPlaceName, category: '⭐ 직접 추가', transit: '', cost: 0, tourApiImg: fetchedImg }];
+        newDays[dayIndex] = day; return { ...course, days: newDays };
+      }));
+    });
   };
 
   // 🤖 AI 코스 생성 바인딩
   const handleGenerate = async (input) => {
     if (!user) {
-      alert('AI 맞춤 코스를 생성하려면 먼저 로그인이 필요합니다. 🔒');
-      setIsLoginOpen(true);
+      // 🌟 [수정] 기본 alert 대신 커스텀 showAlert 사용
+      showAlert('로그인 필요', 'AI 맞춤 코스를 생성하려면 먼저 로그인이 필요합니다. 🔒', () => setIsLoginOpen(true));
       return;
     }
 
-    // 🌟 BM: 무료 회원은 코스 생성 횟수 제한 체크
     if (!user.isPremium && generationCount >= FREE_MAX_GENERATE) {
       setIsPremiumModalOpen(true);
       return;
@@ -209,7 +224,7 @@ function MainPage() {
     setCurrentConcept(input.concept || '일반')
 
     try {
-      const scheduleText = `${input.startDate} 부터 ${input.endDate} quartzite`
+      const scheduleText = `${input.startDate} 부터 ${input.endDate} 까지`
       const aiData = await getSaharaRecommendation(input.destination, scheduleText, input.companion, input.concept)
       
       const formattedResults = await Promise.all(aiData.map(async (item, index) => {
@@ -239,7 +254,6 @@ function MainPage() {
         };
       }));
 
-      // 🌟 BM: 무료 회원이면 무조건 첫날 일정에 광고(AD) 장소를 삽입합니다.
       if (!user.isPremium) {
         formattedResults.forEach(course => {
           if (course.days.length > 0) {
@@ -249,7 +263,7 @@ function MainPage() {
               transit: '추천 동선',
               cost: 0,
               tourApiImg: `https://picsum.photos/seed/ad${Date.now()}/120/120`,
-              isAd: true // 광고 식별자
+              isAd: true 
             });
           }
         });
@@ -257,7 +271,6 @@ function MainPage() {
 
       setRecommendations(formattedResults)
       
-      // 🌟 카운트 증가 및 로컬 스토리지 저장
       const newCount = generationCount + 1;
       setGenerationCount(newCount);
       localStorage.setItem(`sahara_genCount_${user.email}`, newCount);
@@ -271,9 +284,11 @@ function MainPage() {
   }
 
   const handleAddCourse = async (courseId) => {
-    if (!user) { setIsLoginOpen(true); return; }
+    if (!user) { 
+      showAlert('로그인 필요', '코스를 내 일정에 저장하려면 로그인이 필요합니다. 🔒', () => setIsLoginOpen(true));
+      return; 
+    }
     
-    // 🌟 BM: 무료 회원은 내 일정 저장 개수 제한 체크
     if (!user.isPremium && mySavedCourses.length >= FREE_MAX_SAVE) {
       setIsPremiumModalOpen(true);
       return;
@@ -295,7 +310,9 @@ function MainPage() {
     const updatedCourses = [...mySavedCourses, selectedCourse];
     setMySavedCourses(updatedCourses);
     localStorage.setItem(`sahara_saved_${user.email}`, JSON.stringify(updatedCourses));
-    alert('보관함에 안전하게 저장되었습니다! 🎒');
+    
+    // 🌟 [수정] 기본 alert 대체
+    showAlert('저장 완료', '보관함에 안전하게 저장되었습니다! 🎒');
   }
 
   const handleDeleteSavedCourse = (courseId) => {
@@ -329,17 +346,98 @@ function MainPage() {
   const handlePremiumUpgrade = () => {
     setUser(prev => ({ ...prev, isPremium: true }));
     setIsPremiumModalOpen(false);
-    alert('👑 프리미엄 업그레이드가 완료되었습니다! 이제 무제한 & 광고 없는 코스를 즐기세요.');
+    // 🌟 [수정] 기본 alert 대체
+    showAlert('업그레이드 완료', '👑 프리미엄 업그레이드가 완료되었습니다!\n이제 무제한 & 광고 없는 코스를 즐기세요.');
+  }
+
+  const handleSemiPackageClick = (e) => {
+    e.preventDefault();
+    if (!user) {
+      // 🌟 [수정] 기본 alert 대체
+      showAlert('로그인 필요', '세미패키지 원스톱 예약 시스템을 이용하시려면 먼저 로그인해주세요. 🔒', () => setIsLoginOpen(true));
+      return;
+    }
+    
+    if (!user.isPremium) {
+      setIsPremiumModalOpen(true);
+      return;
+    }
+
+    if (mySavedCourses.length === 0) {
+      // 🌟 [수정] 기본 alert 대체
+      showAlert('안내', '보관함에 저장된 맞춤 코스가 없습니다.\n먼저 마음에 드는 코스를 [내 일정에 저장하기] 해주세요! 🗺️');
+      return;
+    }
+
+    setIsBookingModalOpen(true);
   }
 
   return (
     <main className="app">
+      
+      {/* 🌟 [추가] 앱 전체에서 사용되는 커스텀 시스템 모달 (Alert & Prompt) */}
+      {sysModal.isOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.65)', zIndex: 10005, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ background: 'white', padding: '30px 25px', borderRadius: '16px', width: '90%', maxWidth: '400px', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.4)', position: 'relative' }}>
+            
+            <div style={{ fontSize: '3rem', marginBottom: '15px' }}>
+              {sysModal.type === 'prompt' ? '✍️' : '🔔'}
+            </div>
+            
+            <h3 style={{ margin: '0 0 10px 0', color: '#1a202c', fontSize: '1.4rem' }}>{sysModal.title}</h3>
+            <p style={{ color: '#4a5568', fontSize: '1rem', lineHeight: '1.6', marginBottom: '25px', whiteSpace: 'pre-wrap' }}>
+              {sysModal.message}
+            </p>
+
+            {/* 입력창 (Prompt 모드일 때만 활성화) */}
+            {sysModal.type === 'prompt' && (
+              <input
+                type="text"
+                value={promptInput}
+                onChange={(e) => setPromptInput(e.target.value)}
+                placeholder="예: 스타벅스 성수점"
+                style={{ width: '100%', padding: '14px', marginBottom: '25px', borderRadius: '8px', border: '1px solid #cbd5e0', fontSize: '1rem', boxSizing: 'border-box', outline: 'none' }}
+                autoFocus
+              />
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              {sysModal.type === 'prompt' && (
+                <button
+                  onClick={() => setSysModal({ ...sysModal, isOpen: false })}
+                  style={{ flex: 1, padding: '14px', borderRadius: '8px', border: 'none', background: '#edf2f7', color: '#4a5568', fontWeight: 'bold', cursor: 'pointer', transition: 'background 0.2s' }}
+                  onMouseOver={(e) => e.target.style.background = '#e2e8f0'}
+                  onMouseOut={(e) => e.target.style.background = '#edf2f7'}
+                >
+                  취소
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (sysModal.type === 'prompt') {
+                    if (sysModal.onConfirm) sysModal.onConfirm(promptInput);
+                  } else {
+                    if (sysModal.onConfirm) sysModal.onConfirm();
+                  }
+                  setSysModal({ ...sysModal, isOpen: false });
+                }}
+                style={{ flex: 1, padding: '14px', borderRadius: '8px', border: 'none', background: '#0056b3', color: 'white', fontWeight: 'bold', cursor: 'pointer', transition: 'opacity 0.2s' }}
+                onMouseOver={(e) => e.target.style.opacity = '0.9'}
+                onMouseOut={(e) => e.target.style.opacity = '1'}
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="nav">
         <div className="brand"><span className="brand-icon">◎</span><strong>Sahara</strong></div>
         <nav className="nav-menu" aria-label="주요 메뉴">
           <a href="#travel-input">AI 코스추천</a>
           <a href="#recommendations" onClick={restoreInfluencerCourses}>인플루언서 코스</a>
-          <a href="#recommendations">세미패키지</a>
+          <a href="#" onClick={handleSemiPackageClick}>세미패키지</a>
         </nav>
         <div className="nav-actions">
           {user ? (
@@ -393,14 +491,12 @@ function MainPage() {
         <div><strong>{matchRatePercent}%</strong><span>추천 저장률</span></div>
       </section>
 
-      {/* 🌟 [수정] 가로 해상도를 1400px 대형 규격으로 확장하여 여백 분산 처리 */}
       <section className="recommendation-section" id="recommendations" style={{ maxWidth: '1400px', margin: '0 auto', padding: '60px 20px', textAlign: 'center' }}>
         <div className="section-heading">
           <h2>5초 만에 완성된 <span>3가지 맞춤 코스</span></h2>
           <p>입력하신 조건과 취향을 바탕으로 일정표, 주요 장소, 추천 이유를 비교해보세요.</p>
         </div>
 
-        {/* 🌟 [수정] 그리드 정렬을 넓혀서 가로 축 공간 컴팩트화 해제 */}
         <div className="recommendation-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '40px', width: '100%', marginTop: '40px' }}>
           {visibleRecommendations.map((course, index) => {
             const isAdded = mySavedCourses.some(c => c.id === course.id);
@@ -409,15 +505,13 @@ function MainPage() {
             const repImage = course.headerImg || `https://picsum.photos/seed/${encodeURIComponent(course.theme)}/800/400`;
 
             return (
-              /* 🌟 [수정] 카드 자체의 border 라인을 완전히 제거하고 그림자 깊이를 최적화 */
               <article className="recommendation-card" key={course.id} style={{ textAlign: 'left', backgroundColor: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 12px 36px rgba(0,0,0,0.06)', border: 'none', display: 'flex', flexDirection: 'column' }}>
                 
                 <div className={`course-image ${imageClass}`} style={{ position: 'relative', height: '220px', borderRadius: '12px 12px 0 0', overflow: 'hidden' }}>
                   <img src={repImage} alt="테마 이미지" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                  {course.influencerCourse && <span className="course-badge" style={{ position: 'absolute', top: '15px', left: '15px', background: '#e53e3e', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 'bold' }}>인플루언서 추천</span>}
+                  {course.influencerCourse && <span className="course-badge" style={{ position: 'absolute', top: '15px', left: '15px', background: '#e53e3e', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 'bold', zIndex: 2 }}>인플루언서 추천</span>}
                 </div>
 
-                {/* 🌟 [수정] 흰색 패딩 본체 영역을 36px 대형 규격으로 넓혀 텍스트 잘림 현상 제거 */}
                 <div className="course-content" style={{ padding: '36px 32px', textAlign: 'left', flex: 1 }}>
                   <p className="course-meta" style={{ textAlign: 'left' }}>◎ {course.estimatedTime}</p>
                   <h3 style={{ textAlign: 'left' }}>{course.theme}</h3>
@@ -682,13 +776,13 @@ function MainPage() {
             <div style={{ fontSize: '4rem', marginBottom: '10px' }}>👑</div>
             <h2 style={{ fontSize: '1.8rem', color: '#1a202c', marginBottom: '10px' }}>Sahara 프리미엄 패스</h2>
             <p style={{ color: '#718096', marginBottom: '30px', lineHeight: '1.5' }}>
-              무료 회원의 생성/보관 한도를 초과했습니다.<br/>프리미엄으로 업그레이드하고 무제한 혜택을 누리세요!
+              무료 회원의 혜택이 제한되었습니다.<br/>프리미엄으로 업그레이드하고 무제한 혜택을 누리세요!
             </p>
             
             <div style={{ background: '#faf5ff', border: '1px solid #d6bcfa', borderRadius: '12px', padding: '20px', textAlign: 'left', marginBottom: '30px' }}>
               <ul style={{ margin: 0, padding: 0, listStyle: 'none', color: '#553c9a', fontWeight: '500', lineHeight: '2' }}>
-                <li>✅ <b>무제한</b> AI 맞춤 코스 생성</li>
-                <li>✅ <b>무제한</b> 내 일정 보관함 저장</li>
+                <li>✅ <b>VIP 세미패키지 원스톱 예약 대행</b></li>
+                <li>✅ <b>무제한</b> AI 맞춤 코스 생성/저장</li>
                 <li>✅ 스폰서 <b>광고 없는</b> 클린한 일정표</li>
               </ul>
             </div>
@@ -698,6 +792,41 @@ function MainPage() {
             </button>
             <button onClick={() => setIsPremiumModalOpen(false)} style={{ width: '100%', padding: '16px', background: 'transparent', color: '#a0aec0', border: 'none', marginTop: '10px', fontSize: '0.95rem', cursor: 'pointer' }}>
               다음에 할게요
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* VIP 예약 대행 모달창 */}
+      {isBookingModalOpen && user?.isPremium && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.75)', zIndex: 10003, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ background: 'white', padding: '40px 30px', borderRadius: '20px', width: '90%', maxWidth: '500px', textAlign: 'center', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
+            <button onClick={() => setIsBookingModalOpen(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#a0aec0' }}>×</button>
+            
+            <div style={{ fontSize: '3rem', marginBottom: '10px' }}>✈️</div>
+            <h2 style={{ fontSize: '1.8rem', color: '#1a202c', marginBottom: '10px' }}>VIP 원스톱 예약 시스템</h2>
+            <p style={{ color: '#718096', marginBottom: '20px', lineHeight: '1.5' }}>
+              프리미엄 회원님을 위한 전담 컨시어지가<br/>아래 일정의 항공/숙박/렌터카 예약을 대행해 드립니다.
+            </p>
+            
+            <div style={{ background: '#f8f9fa', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '15px', textAlign: 'left', marginBottom: '25px', maxHeight: '180px', overflowY: 'auto' }}>
+              <p style={{ margin: '0 0 10px 0', fontSize: '0.85rem', color: '#a0aec0', fontWeight: 'bold' }}>예약 요청 목록</p>
+              {mySavedCourses.map((c, i) => (
+                <div key={i} style={{ padding: '8px 0', borderBottom: i < mySavedCourses.length -1 ? '1px dashed #cbd5e0' : 'none', color: '#2d3748', fontWeight: 'bold' }}>
+                  ✔️ {c.theme} <span style={{ fontSize: '0.8rem', color: '#718096', fontWeight: 'normal', marginLeft: '6px' }}>({c.estimatedTime})</span>
+                </div>
+              ))}
+            </div>
+
+            <button 
+              onClick={() => { 
+                setIsBookingModalOpen(false); 
+                // 🌟 [수정] 기존 alert을 시스템 모달로 교체
+                showAlert('예약 요청 완료', '전담 컨시어지에게 견적 및 예약 대행 요청이 성공적으로 전송되었습니다!\n빠른 시일 내에 기입하신 이메일로 안내해 드리겠습니다. 🎉');
+              }} 
+              style={{ width: '100%', padding: '16px', background: '#1a202c', color: 'white', border: 'none', borderRadius: '12px', fontSize: '1.1rem', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2)' }}
+            >
+              예약 및 견적서 요청하기
             </button>
           </div>
         </div>
