@@ -507,15 +507,6 @@ function MainPage() {
           <a href="#recommendations" onClick={restoreInfluencerCourses}>인플루언서 코스</a>
           <a href="#" onClick={handleSemiPackageClick}>세미패키지</a>
           
-          {user && !user.isPremium && (
-            <a 
-              href="#" 
-              onClick={(e) => { e.preventDefault(); setIsPremiumModalOpen(true); }} 
-              style={{ color: '#805ad5', fontWeight: 'bold', marginLeft: '10px' }}
-            >
-              ✨ Premium 가입
-            </a>
-          )}
         </nav>
 
         <div className="nav-actions">
