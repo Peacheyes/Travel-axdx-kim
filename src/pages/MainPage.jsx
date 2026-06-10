@@ -493,7 +493,7 @@ function MainPage() {
 
       <section className="recommendation-section" id="recommendations" style={{ maxWidth: '1400px', margin: '0 auto', padding: '60px 20px', textAlign: 'center' }}>
         <div className="section-heading">
-          <h2>5초 만에 완성된 <span>3가지 맞춤 코스</span></h2>
+          <h2>1분 만에 완성된 <span>3가지 맞춤 코스</span></h2>
           <p>입력하신 조건과 취향을 바탕으로 일정표, 주요 장소, 추천 이유를 비교해보세요.</p>
         </div>
 

@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-3.1-flash-lite';
 
 function getApiKey() {
   return import.meta.env.VITE_GEMINI_API_KEY?.trim() || '';
