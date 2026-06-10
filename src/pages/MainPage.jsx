@@ -111,15 +111,21 @@ function MainPage() {
   const [user, setUser] = useState(null)
   const [generationCount, setGenerationCount] = useState(0)
 
-  // 🌟 [추가] 시스템 알림창(Modal) 공통 상태
   const [sysModal, setSysModal] = useState({
     isOpen: false,
-    type: 'alert', // 'alert' | 'prompt'
+    type: 'alert', 
     title: '',
     message: '',
     onConfirm: null,
   })
   const [promptInput, setPromptInput] = useState('')
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem('sahara_current_user');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -138,12 +144,17 @@ function MainPage() {
   const [errorMessage, setErrorMessage] = useState('')
   const [isLoginOpen, setIsLoginOpen] = useState(false)
   
+  const [authMode, setAuthMode] = useState('login') 
+  const [loginForm, setLoginForm] = useState({ 
+    email: '', password: '', nickname: '', 
+    age: '', gender: '', job: '', region: '' 
+  })
+  
   const [isMyPageOpen, setIsMyPageOpen] = useState(false)
   const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false)
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
   
   const [selectedDetailCourse, setSelectedDetailCourse] = useState(null)
-  const [loginForm, setLoginForm] = useState({ email: '', password: '' })
 
   const visibleRecommendations = recommendations
 
@@ -153,7 +164,6 @@ function MainPage() {
 
   const matchRatePercent = Math.round(matchRate * 100)
 
-  // 🌟 [추가] 공통 커스텀 모달 호출 헬퍼 함수
   const showAlert = (title, message, onConfirm = null) => {
     setSysModal({ isOpen: true, type: 'alert', title, message, onConfirm });
   };
@@ -189,7 +199,6 @@ function MainPage() {
     }));
   };
 
-  // 🌟 [수정] window.prompt 대신 커스텀 프롬프트 모달 사용
   const addSchedule = (courseId, dayIndex) => {
     showPrompt('장소 추가', '추가할 장소 이름을 입력하세요:', async (newPlaceName) => {
       if (!newPlaceName || newPlaceName.trim() === '') return;
@@ -206,10 +215,8 @@ function MainPage() {
     });
   };
 
-  // 🤖 AI 코스 생성 바인딩
   const handleGenerate = async (input) => {
     if (!user) {
-      // 🌟 [수정] 기본 alert 대신 커스텀 showAlert 사용
       showAlert('로그인 필요', 'AI 맞춤 코스를 생성하려면 먼저 로그인이 필요합니다. 🔒', () => setIsLoginOpen(true));
       return;
     }
@@ -311,7 +318,6 @@ function MainPage() {
     setMySavedCourses(updatedCourses);
     localStorage.setItem(`sahara_saved_${user.email}`, JSON.stringify(updatedCourses));
     
-    // 🌟 [수정] 기본 alert 대체
     showAlert('저장 완료', '보관함에 안전하게 저장되었습니다! 🎒');
   }
 
@@ -328,32 +334,94 @@ function MainPage() {
     setLoginForm((prev) => ({ ...prev, [name]: value }))
   }
 
-  const handleLoginSubmit = (event) => {
+  const handleAuthSubmit = async (event) => {
     event.preventDefault()
     if (!loginForm.email.trim() || !loginForm.password.trim()) return;
-    const nickname = loginForm.email.split('@')[0]
-    setUser({ email: loginForm.email, nickname, isPremium: false })
-    setLoginForm({ email: '', password: '' })
-    setIsLoginOpen(false)
+
+    if (authMode === 'signup') {
+      if (!loginForm.nickname || !loginForm.age || !loginForm.gender || !loginForm.job || !loginForm.region) {
+        showAlert('안내', '정확한 분석을 위해 모든 정보를 선택해주세요!'); return;
+      }
+      
+      const { data: existingUser } = await supabase.from('sahara_users').select('email').eq('email', loginForm.email);
+      if (existingUser && existingUser.length > 0) {
+        showAlert('가입 실패', '이미 사용 중인 이메일입니다.'); return;
+      }
+
+      const newUserData = {
+        email: loginForm.email,
+        password: loginForm.password, 
+        nickname: loginForm.nickname,
+        age: loginForm.age,
+        gender: loginForm.gender,
+        job: loginForm.job,
+        region: loginForm.region,
+        is_premium: false
+      };
+
+      const { error } = await supabase.from('sahara_users').insert([newUserData]);
+      if (error) { 
+        console.error("🚨 Supabase 에러 상세 원인:", error);
+        showAlert('오류', '가입 중 문제가 발생했습니다.'); 
+        return; 
+      }
+
+      const loggedInUser = { ...newUserData, isPremium: false };
+      setUser(loggedInUser);
+      localStorage.setItem('sahara_current_user', JSON.stringify(loggedInUser)); 
+      
+      setLoginForm({ email: '', password: '', nickname: '', age: '', gender: '', job: '', region: '' });
+      setIsLoginOpen(false);
+      showAlert('가입 완료', `환영합니다, ${loggedInUser.nickname}님! 🎉\nSahara와 함께 완벽한 여행을 만들어보세요.`);
+      
+    } else {
+      const { data: matchedUser, error } = await supabase.from('sahara_users')
+        .select('*')
+        .eq('email', loginForm.email)
+        .eq('password', loginForm.password);
+
+      if (matchedUser && matchedUser.length > 0) {
+        const userInfo = matchedUser[0];
+        const loggedInUser = { 
+          email: userInfo.email, nickname: userInfo.nickname, isPremium: userInfo.is_premium,
+          age: userInfo.age, gender: userInfo.gender, job: userInfo.job, region: userInfo.region 
+        };
+        setUser(loggedInUser);
+        localStorage.setItem('sahara_current_user', JSON.stringify(loggedInUser)); 
+        
+        setLoginForm({ email: '', password: '', nickname: '', age: '', gender: '', job: '', region: '' });
+        setIsLoginOpen(false);
+      } else {
+        showAlert('로그인 실패', '이메일 또는 비밀번호가 일치하지 않거나, 가입되지 않은 계정입니다.');
+      }
+    }
   }
 
   const handleLogout = () => {
-    setUser(null)
-    setIsMyPageOpen(false)
-    setSelectedDetailCourse(null)
+    setUser(null);
+    setIsMyPageOpen(false);
+    setSelectedDetailCourse(null);
+    localStorage.removeItem('sahara_current_user'); 
   }
 
-  const handlePremiumUpgrade = () => {
-    setUser(prev => ({ ...prev, isPremium: true }));
-    setIsPremiumModalOpen(false);
-    // 🌟 [수정] 기본 alert 대체
-    showAlert('업그레이드 완료', '👑 프리미엄 업그레이드가 완료되었습니다!\n이제 무제한 & 광고 없는 코스를 즐기세요.');
+  const handlePremiumUpgrade = async () => {
+    try {
+      await supabase.from('sahara_users').update({ is_premium: true }).eq('email', user.email);
+      
+      const updatedUser = { ...user, isPremium: true };
+      setUser(updatedUser);
+      localStorage.setItem('sahara_current_user', JSON.stringify(updatedUser)); 
+      
+      setIsPremiumModalOpen(false);
+      showAlert('업그레이드 완료', '👑 프리미엄 업그레이드가 완료되었습니다!\n이제 무제한 & 광고 없는 코스를 즐기세요.');
+    } catch (error) {
+      showAlert('오류', '업그레이드 처리 중 문제가 발생했습니다.');
+    }
   }
 
   const handleSemiPackageClick = (e) => {
     e.preventDefault();
     if (!user) {
-      // 🌟 [수정] 기본 alert 대체
       showAlert('로그인 필요', '세미패키지 원스톱 예약 시스템을 이용하시려면 먼저 로그인해주세요. 🔒', () => setIsLoginOpen(true));
       return;
     }
@@ -364,7 +432,6 @@ function MainPage() {
     }
 
     if (mySavedCourses.length === 0) {
-      // 🌟 [수정] 기본 alert 대체
       showAlert('안내', '보관함에 저장된 맞춤 코스가 없습니다.\n먼저 마음에 드는 코스를 [내 일정에 저장하기] 해주세요! 🗺️');
       return;
     }
@@ -375,7 +442,7 @@ function MainPage() {
   return (
     <main className="app">
       
-      {/* 🌟 [추가] 앱 전체에서 사용되는 커스텀 시스템 모달 (Alert & Prompt) */}
+      {/* 커스텀 시스템 모달 */}
       {sysModal.isOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.65)', zIndex: 10005, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ background: 'white', padding: '30px 25px', borderRadius: '16px', width: '90%', maxWidth: '400px', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.4)', position: 'relative' }}>
@@ -389,7 +456,6 @@ function MainPage() {
               {sysModal.message}
             </p>
 
-            {/* 입력창 (Prompt 모드일 때만 활성화) */}
             {sysModal.type === 'prompt' && (
               <input
                 type="text"
@@ -434,11 +500,24 @@ function MainPage() {
 
       <header className="nav">
         <div className="brand"><span className="brand-icon">◎</span><strong>Sahara</strong></div>
+        
+        {/* 🌟 1. 네비게이션 메뉴 영역에 깔끔한 텍스트 형태로 Premium 추가 */}
         <nav className="nav-menu" aria-label="주요 메뉴">
           <a href="#travel-input">AI 코스추천</a>
           <a href="#recommendations" onClick={restoreInfluencerCourses}>인플루언서 코스</a>
           <a href="#" onClick={handleSemiPackageClick}>세미패키지</a>
+          
+          {user && !user.isPremium && (
+            <a 
+              href="#" 
+              onClick={(e) => { e.preventDefault(); setIsPremiumModalOpen(true); }} 
+              style={{ color: '#805ad5', fontWeight: 'bold', marginLeft: '10px' }}
+            >
+              ✨ Premium 가입
+            </a>
+          )}
         </nav>
+
         <div className="nav-actions">
           {user ? (
             <div className="user-menu" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -463,9 +542,21 @@ function MainPage() {
           <p className="hero-badge">AI 기반 초개인화 큐레이션</p>
           <h1>정보의 사막에서<br /><span>나만의 여행 루트를 찾다</span></h1>
           <p>목적지, 일정, 동반자, 여행 컨셉만 입력하면 Sahara가 3가지 테마별 일정과 지도 동선을 한 번에 추천합니다.</p>
+          
+          {/* 🌟 2. 히어로 배너 버튼 영역에 눈에 띄게 추가 배치 */}
           <div className="hero-actions">
             <a href="#travel-input" className="primary-link">맞춤 코스 생성하기</a>
             <a href="#recommendations" className="secondary-link" onClick={restoreInfluencerCourses}>인플루언서 코스 보기</a>
+            
+            {user && !user.isPremium && (
+              <button 
+                onClick={() => setIsPremiumModalOpen(true)} 
+                className="secondary-link" 
+                style={{ background: 'linear-gradient(135deg, #805ad5 0%, #d6bcfa 100%)', color: 'white', border: 'none', cursor: 'pointer' }}
+              >
+                ✨ Premium 가입
+              </button>
+            )}
           </div>
         </div>
 
@@ -821,7 +912,6 @@ function MainPage() {
             <button 
               onClick={() => { 
                 setIsBookingModalOpen(false); 
-                // 🌟 [수정] 기존 alert을 시스템 모달로 교체
                 showAlert('예약 요청 완료', '전담 컨시어지에게 견적 및 예약 대행 요청이 성공적으로 전송되었습니다!\n빠른 시일 내에 기입하신 이메일로 안내해 드리겠습니다. 🎉');
               }} 
               style={{ width: '100%', padding: '16px', background: '#1a202c', color: 'white', border: 'none', borderRadius: '12px', fontSize: '1.1rem', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2)' }}
@@ -832,21 +922,63 @@ function MainPage() {
         </div>
       )}
 
-      {/* 로그인 모달 */}
+      {/* 로그인 및 데이터 수집용 회원가입 모달 */}
       {isLoginOpen && (
         <div className="login-modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.7)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <section className="login-modal" aria-label="로그인 창" style={{ background: 'white', padding: '2rem', borderRadius: '12px', width: '90%', maxWidth: '400px', position: 'relative', zIndex: 10000, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)' }}>
+          <section className="login-modal" aria-label="로그인 창" style={{ background: 'white', padding: '2.5rem', borderRadius: '16px', width: '90%', maxWidth: '450px', position: 'relative', zIndex: 10000, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3)' }}>
             <button type="button" onClick={() => setIsLoginOpen(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#a0aec0' }}>×</button>
+            
             <div className="login-modal-header" style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
               <span className="brand-icon" style={{ fontSize: '2.5rem', color: '#0056b3' }}>◎</span>
-              <h2 style={{ margin: '10px 0 5px 0', color: '#1a202c' }}>Sahara 로그인</h2>
-              <p style={{ fontSize: '0.9rem', color: '#718096', marginTop: '5px' }}>로그인 후 나만의 여행 코스를 만드세요.</p>
+              <h2 style={{ margin: '10px 0 5px 0', color: '#1a202c', fontSize: '1.6rem' }}>
+                {authMode === 'login' ? 'Sahara 로그인' : 'Sahara 회원가입'}
+              </h2>
+              <p style={{ fontSize: '0.9rem', color: '#718096', marginTop: '5px' }}>
+                {authMode === 'login' ? '로그인 후 나만의 여행 코스를 만드세요.' : '정확한 분석을 위해 여행자의 프로필을 알려주세요!'}
+              </p>
             </div>
-            <form className="login-form" onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <input name="email" type="email" value={loginForm.email} onChange={handleLoginChange} placeholder="이메일 입력 (예: admin@sahara.com)" style={{ padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '1rem' }} />
-              <input name="password" type="password" value={loginForm.password} onChange={handleLoginChange} placeholder="비밀번호 입력" style={{ padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '1rem' }} />
-              <button type="submit" style={{ padding: '14px', background: '#0056b3', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer' }}>시작하기</button>
+
+            <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <input name="email" type="email" value={loginForm.email} onChange={handleLoginChange} placeholder="이메일 입력 (예: user@sahara.com)" style={{ padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '1rem', outlineColor: '#0056b3' }} />
+              <input name="password" type="password" value={loginForm.password} onChange={handleLoginChange} placeholder="비밀번호 입력" style={{ padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '1rem', outlineColor: '#0056b3' }} />
+              
+              {authMode === 'signup' && (
+                <>
+                  <input name="nickname" type="text" value={loginForm.nickname} onChange={handleLoginChange} placeholder="사용할 닉네임 (예: 제주홀릭)" style={{ padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '1rem', outlineColor: '#0056b3' }} />
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <select name="age" value={loginForm.age} onChange={handleLoginChange} style={{ padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', color: loginForm.age ? '#1a202c' : '#a0aec0', outlineColor: '#0056b3' }}>
+                      <option value="" disabled>연령대 선택</option>
+                      <option value="10대">10대</option><option value="20대">20대</option><option value="30대">30대</option><option value="40대">40대</option><option value="50대 이상">50대 이상</option>
+                    </select>
+                    <select name="gender" value={loginForm.gender} onChange={handleLoginChange} style={{ padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', color: loginForm.gender ? '#1a202c' : '#a0aec0', outlineColor: '#0056b3' }}>
+                      <option value="" disabled>성별 선택</option>
+                      <option value="여성">여성</option><option value="남성">남성</option>
+                    </select>
+                    <select name="job" value={loginForm.job} onChange={handleLoginChange} style={{ padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', color: loginForm.job ? '#1a202c' : '#a0aec0', outlineColor: '#0056b3' }}>
+                      <option value="" disabled>직업군 선택</option>
+                      <option value="학생">학생</option><option value="직장인">직장인</option><option value="프리랜서">프리랜서</option><option value="주부">주부</option><option value="기타">기타</option>
+                    </select>
+                    <select name="region" value={loginForm.region} onChange={handleLoginChange} style={{ padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', color: loginForm.region ? '#1a202c' : '#a0aec0', outlineColor: '#0056b3' }}>
+                      <option value="" disabled>거주 지역</option>
+                      <option value="서울">서울</option><option value="경기/인천">경기/인천</option><option value="충청/강원">충청/강원</option><option value="경상/전라">경상/전라</option><option value="기타">기타</option>
+                    </select>
+                  </div>
+                </>
+              )}
+              
+              <button type="submit" style={{ padding: '16px', background: '#0056b3', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.05rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px', boxShadow: '0 4px 6px rgba(0,86,179,0.2)' }}>
+                {authMode === 'login' ? '시작하기' : '가입 완료하기'}
+              </button>
             </form>
+
+            <div style={{ marginTop: '25px', textAlign: 'center', fontSize: '0.9rem', color: '#718096' }}>
+              {authMode === 'login' ? (
+                <>아직 계정이 없으신가요? <button onClick={() => { setAuthMode('signup'); setLoginForm({email:'', password:'', nickname:'', age:'', gender:'', job:'', region:''}) }} style={{ background: 'none', border: 'none', color: '#0056b3', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.9rem', padding: 0 }}>회원가입</button></>
+              ) : (
+                <>이미 계정이 있으신가요? <button onClick={() => setAuthMode('login')} style={{ background: 'none', border: 'none', color: '#0056b3', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.9rem', padding: 0 }}>로그인</button></>
+              )}
+            </div>
           </section>
         </div>
       )}
